@@ -6,7 +6,7 @@ from nicegui import ui
 from nicegui.events import TableSelectionEventArguments
 
 from todoapp.domain.service import TodoService
-from todoapp.ui.app_state import AppState
+from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import format_duration
 
 COLUMNS = [
@@ -32,25 +32,30 @@ class ListView:
                 selection="single",
                 on_select=self._on_select,
             )
-        self.render()
+            self.render()
+        ui.timer(1.0, self._tick)
         return root
 
     def _on_select(self, e: TableSelectionEventArguments) -> None:
         if e.selection:
             self._state.select(e.selection[0]["id"])
 
+    def _tick(self) -> None:
+        if self._state.screen is Screen.LIST and self._service.running_record() is not None:
+            self.render.refresh()
+
     @ui.refreshable_method
     def render(self) -> None:
         rows = []
         for item in self._service.items:
             cumulative = self._service.cumulative_seconds(item.id)
-            remaining_hours = self._service.remaining_hours(item.id)
+            remaining = self._service.remaining_seconds(item.id)
             rows.append(
                 {
                     "id": item.id,
                     "name": item.name,
                     "cumulative": format_duration(cumulative),
-                    "remaining": f"{remaining_hours:.1f}h" if item.estimate_hours > 0 else "-",
+                    "remaining": format_duration(remaining) if item.estimate_hours > 0 else "-",
                 }
             )
         self.table.update_rows(rows, clear_selection=False)

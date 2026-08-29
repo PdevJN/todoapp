@@ -136,10 +136,13 @@ class TodoService:
             if r.item_id == item_id and r.start_time.date() == today
         )
 
-    def remaining_hours(self, item_id: str) -> float:
+    def remaining_seconds(self, item_id: str) -> float:
         item = self._find_item(item_id)
-        cumulative_hours = self.cumulative_seconds(item_id) / 3600
-        return max(item.estimate_hours - cumulative_hours, 0.0)
+        estimate_seconds = item.estimate_hours * 3600
+        return max(estimate_seconds - self.cumulative_seconds(item_id), 0.0)
+
+    def remaining_hours(self, item_id: str) -> float:
+        return self.remaining_seconds(item_id) / 3600
 
     def today_records(self, today: date) -> list[ExecutionRecord]:
         todays = [r for r in self._data.records if r.start_time.date() == today]

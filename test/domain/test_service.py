@@ -145,3 +145,43 @@ def test_today_total_seconds_excludes_other_days() -> None:
 
     assert service.today_total_seconds(item.id, date(2026, 8, 30)) == 300
     assert service.cumulative_seconds(item.id) == 900
+
+
+def test_remaining_hours_decreases_as_execution_accumulates() -> None:
+    service, _, clock = _service()
+    item = service.add_item(
+        "散歩", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=2.0
+    )
+    assert service.remaining_hours(item.id) == 2.0
+
+    service.start(item.id)
+    clock.advance(3600)
+    service.stop_running()
+
+    assert service.remaining_hours(item.id) == 1.0
+
+
+def test_remaining_hours_does_not_go_below_zero() -> None:
+    service, _, clock = _service()
+    item = service.add_item(
+        "散歩", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=1.0
+    )
+
+    service.start(item.id)
+    clock.advance(7200)
+    service.stop_running()
+
+    assert service.remaining_hours(item.id) == 0.0
+
+
+def test_remaining_seconds_reflects_small_amounts_of_execution() -> None:
+    service, _, clock = _service()
+    item = service.add_item(
+        "散歩", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=3.0
+    )
+
+    service.start(item.id)
+    clock.advance(60)
+    service.stop_running()
+
+    assert service.remaining_seconds(item.id) == 3 * 3600 - 60
