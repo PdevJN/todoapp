@@ -33,7 +33,12 @@ class MainView:
             self.list_container.make_sortable(on_end=self._on_reorder)
             self.render()
             self._new_item_input = ui.input(placeholder="新しいアイテムを入力してEnter").classes("w-full")
-            self._new_item_input.on("keydown.enter", self._add_item)
+            self._new_item_input.on(
+                "keydown.enter",
+                self._add_item,
+                # IME変換確定のEnterでも発火するため、変換中(isComposing)は無視する
+                js_handler="(...args) => { if (!args[0].isComposing && args[0].keyCode !== 229) emit(...args); }",
+            )
         ui.timer(1.0, self._tick)
         return root
 
