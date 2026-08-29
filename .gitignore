@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Test / type-check caches
+.pytest_cache/
+.mypy_cache/
+.coverage
