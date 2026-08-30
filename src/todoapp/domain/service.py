@@ -4,7 +4,14 @@ from collections.abc import Callable
 from datetime import date, datetime
 from typing import Protocol
 
-from todoapp.domain.models import AppData, ExecutionRecord, ScheduleType, TodoItem, is_due_today
+from todoapp.domain.models import (
+    AppData,
+    Category,
+    ExecutionRecord,
+    ScheduleType,
+    TodoItem,
+    is_due_today,
+)
 
 
 class TodoRepository(Protocol):
@@ -30,6 +37,10 @@ class TodoService:
     def records(self) -> list[ExecutionRecord]:
         return self._data.records
 
+    @property
+    def categories(self) -> list[Category]:
+        return self._data.categories
+
     def _save(self) -> None:
         self._repository.save(self._data)
 
@@ -44,6 +55,12 @@ class TodoService:
             if record.id == record_id:
                 return record
         raise KeyError(record_id)
+
+    def _find_category(self, category_id: str) -> Category:
+        for category in self._data.categories:
+            if category.id == category_id:
+                return category
+        raise KeyError(category_id)
 
     def add_item(
         self,
@@ -163,3 +180,61 @@ class TodoService:
     def delete_record(self, record_id: str) -> None:
         self._data.records = [r for r in self._data.records if r.id != record_id]
         self._save()
+
+    def add_category(self, name: str, kind: str = "", expiry_date: date | None = None) -> Category:
+        category = Category(name=name, kind=kind, expiry_date=expiry_date)
+        self._data.categories.append(category)
+        self._save()
+        return category
+
+    def edit_category(self, category_id: str, *, name: str, kind: str, expiry_date: date | None) -> None:
+        category = self._find_category(category_id)
+        category.name = name
+        category.kind = kind
+        category.expiry_date = expiry_date
+        self._save()
+
+    def delete_category(self, category_id: str) -> None:
+        self._data.categories = [c for c in self._data.categories if c.id != category_id]
+        for item in self._data.items:
+            if item.category_id == category_id:
+                item.category_id = None
+        self._save()
+
+    def set_item_category(self, item_id: str, category_id: str | None) -> None:
+        item = self._find_item(item_id)
+        item.category_id = category_id
+        self._save()
+
+    def category_for_item(self, item_id: str) -> Category | None:
+        item = self._find_item(item_id)
+        if item.category_id is None:
+            return None
+        for category in self._data.categories:
+            if category.id == item.category_id:
+                return category
+        return None
+
+    def category_today_totals(self, today: date) -> dict[str | None, float]:
+        now = self._clock()
+        totals: dict[str | None, float] = {}
+        items_by_id = {item.id: item for item in self._data.items}
+        for record in self._data.records:
+            if record.start_time.date() != today:
+                continue
+            item = items_by_id.get(record.item_id)
+            category_id = item.category_id if item is not None else None
+            totals[category_id] = totals.get(category_id, 0.0) + record.elapsed_seconds(now)
+        return totals
+
+    def kind_today_totals(self, today: date) -> dict[str, float]:
+        categories_by_id = {category.id: category for category in self._data.categories}
+        totals: dict[str, float] = {}
+        for category_id, seconds in self.category_today_totals(today).items():
+            if category_id is None:
+                kind = "未定"
+            else:
+                category = categories_by_id.get(category_id)
+                kind = (category.kind if category and category.kind else "未設定")
+            totals[kind] = totals.get(kind, 0.0) + seconds
+        return totals

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import date
 
 from nicegui import ui
 from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 
+from todoapp.domain.models import is_category_expired
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
@@ -44,6 +46,9 @@ class ListView:
                     <div class="row items-center q-gutter-x-sm">
                         <span>{{ props.row.name }}</span>
                         <q-badge outline color="primary">{{ props.row.schedule }}</q-badge>
+                        <q-badge outline :color="props.row.category_color">
+                            <span v-if="props.row.category_expired">❗️</span>{{ props.row.category_label }}
+                        </q-badge>
                     </div>
                 </q-td>
                 """,
@@ -67,10 +72,12 @@ class ListView:
 
     @ui.refreshable_method
     def render(self) -> None:
+        today = date.today()
         rows = []
         for item in self._service.items:
             cumulative = self._service.cumulative_seconds(item.id)
             remaining = self._service.remaining_seconds(item.id)
+            category = self._service.category_for_item(item.id)
             rows.append(
                 {
                     "id": item.id,
@@ -79,6 +86,9 @@ class ListView:
                     "anchor": item.anchor_date.strftime("%m/%d"),
                     "cumulative": format_duration(cumulative),
                     "remaining": format_duration(remaining) if item.estimate_hours > 0 else "-",
+                    "category_label": category.name if category else "未定",
+                    "category_color": category.color if category else "grey",
+                    "category_expired": bool(category and is_category_expired(category, today)),
                 }
             )
         self.table.update_rows(rows, clear_selection=False)

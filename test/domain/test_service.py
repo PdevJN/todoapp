@@ -215,3 +215,94 @@ def test_remaining_seconds_reflects_small_amounts_of_execution() -> None:
     service.stop_running()
 
     assert service.remaining_seconds(item.id) == 3 * 3600 - 60
+
+
+def test_add_category_assigns_random_color() -> None:
+    service, _, _ = _service()
+    category = service.add_category("仕事", kind="業務")
+    assert category in service.categories
+    assert category.color
+
+
+def test_edit_category_updates_fields() -> None:
+    service, _, _ = _service()
+    category = service.add_category("仕事")
+
+    service.edit_category(category.id, name="プライベート", kind="私用", expiry_date=date(2026, 12, 31))
+
+    assert service.categories[0].name == "プライベート"
+    assert service.categories[0].kind == "私用"
+    assert service.categories[0].expiry_date == date(2026, 12, 31)
+
+
+def test_delete_category_clears_it_from_items() -> None:
+    service, _, _ = _service()
+    category = service.add_category("仕事")
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item.id, category.id)
+
+    service.delete_category(category.id)
+
+    assert service.categories == []
+    assert service.items[0].category_id is None
+
+
+def test_set_item_category_and_category_for_item() -> None:
+    service, _, _ = _service()
+    category = service.add_category("仕事")
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30))
+
+    service.set_item_category(item.id, category.id)
+
+    assert service.category_for_item(item.id) == category
+
+
+def test_category_for_item_is_none_when_uncategorized() -> None:
+    service, _, _ = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30))
+
+    assert service.category_for_item(item.id) is None
+
+
+def test_category_today_totals_groups_by_item_category() -> None:
+    service, _, clock = _service()
+    work = service.add_category("仕事")
+    item_a = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    item_b = service.add_item("B", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item_a.id, work.id)
+
+    service.start(item_a.id)
+    clock.advance(600)
+    service.stop_running()
+    service.start(item_b.id)
+    clock.advance(300)
+    service.stop_running()
+
+    totals = service.category_today_totals(date(2026, 8, 30))
+    assert totals[work.id] == 600
+    assert totals[None] == 300
+
+
+def test_kind_today_totals_groups_by_category_kind() -> None:
+    service, _, clock = _service()
+    work = service.add_category("仕事", kind="業務")
+    hobby = service.add_category("趣味", kind="業務")
+    item_work = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    item_hobby = service.add_item("B", ScheduleType.DAILY, date(2026, 8, 30))
+    item_none = service.add_item("C", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item_work.id, work.id)
+    service.set_item_category(item_hobby.id, hobby.id)
+
+    service.start(item_work.id)
+    clock.advance(600)
+    service.stop_running()
+    service.start(item_hobby.id)
+    clock.advance(300)
+    service.stop_running()
+    service.start(item_none.id)
+    clock.advance(60)
+    service.stop_running()
+
+    totals = service.kind_today_totals(date(2026, 8, 30))
+    assert totals["業務"] == 900
+    assert totals["未定"] == 60

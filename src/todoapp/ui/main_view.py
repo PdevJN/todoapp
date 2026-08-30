@@ -18,10 +18,12 @@ class MainView:
         service: TodoService,
         state: AppState,
         refresh_all: Callable[[], None],
+        open_category_pick: Callable[[str], None],
     ) -> None:
         self._service = service
         self._state = state
         self._refresh_all = refresh_all
+        self._open_category_pick = open_category_pick
         self._new_item_input: ui.input | None = None
         self._elapsed_label: ui.label | None = None
         self._elapsed_item_id: str | None = None
@@ -32,25 +34,31 @@ class MainView:
             self.list_container = ui.column().classes("w-full gap-1")
             self.list_container.make_sortable(on_end=self._on_reorder)
             self.render()
-            self._new_item_input = ui.input(placeholder="新しいアイテムを入力してEnter").classes("w-full")
-            self._new_item_input.on(
-                "keydown.enter",
-                self._add_item,
-                # IME変換確定のEnterでも発火するため、変換中(isComposing)は無視する
-                js_handler="(...args) => { if (!args[0].isComposing && args[0].keyCode !== 229) emit(...args); }",
+            self._new_item_input = ui.input(placeholder="新しいアイテムを入力してEnter(Shift+Enterでカテゴリ選択)").classes(
+                "w-full"
             )
+            # IME変換確定のEnterでも発火するため、変換中(isComposing)は無視する
+            ime_guard = "(...args) => { if (!args[0].isComposing && args[0].keyCode !== 229) emit(...args); }"
+            self._new_item_input.on("keydown.enter.exact", self._add_item, js_handler=ime_guard)
+            self._new_item_input.on("keydown.enter.shift", self._add_item_and_pick_category, js_handler=ime_guard)
         ui.timer(1.0, self._tick)
         return root
 
-    def _add_item(self) -> None:
+    def _add_item(self) -> TodoItem | None:
         assert self._new_item_input is not None
         name = self._new_item_input.value.strip()
         if not name:
-            return
+            return None
         item = self._service.add_item(name, ScheduleType.ONE_TIME, date.today())
         self._new_item_input.value = ""
         self._state.select(item.id)
         self._refresh_all()
+        return item
+
+    def _add_item_and_pick_category(self) -> None:
+        item = self._add_item()
+        if item is not None:
+            self._open_category_pick(item.id)
 
     def _select(self, item_id: str) -> None:
         self._state.select(item_id)

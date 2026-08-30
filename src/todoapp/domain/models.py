@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import random
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -15,12 +16,60 @@ class ScheduleType(str, Enum):
     ONE_TIME = "one_time"
 
 
+CATEGORY_COLORS = [
+    "red",
+    "orange",
+    "amber",
+    "green",
+    "teal",
+    "blue",
+    "indigo",
+    "purple",
+    "pink",
+    "brown",
+]
+
+
+@dataclass
+class Category:
+    name: str
+    kind: str = ""
+    expiry_date: date | None = None
+    color: str = field(default_factory=lambda: random.choice(CATEGORY_COLORS))
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "kind": self.kind,
+            "expiry_date": self.expiry_date.isoformat() if self.expiry_date else None,
+            "color": self.color,
+        }
+
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> Category:
+        expiry_date = data.get("expiry_date")
+        return Category(
+            id=data.get("id") or uuid.uuid4().hex,
+            name=data["name"],
+            kind=data.get("kind", ""),
+            expiry_date=date.fromisoformat(expiry_date) if expiry_date else None,
+            color=data.get("color") or random.choice(CATEGORY_COLORS),
+        )
+
+
+def is_category_expired(category: Category, today: date) -> bool:
+    return category.expiry_date is not None and category.expiry_date < today
+
+
 @dataclass
 class TodoItem:
     name: str
     schedule_type: ScheduleType
     anchor_date: date
     estimate_hours: float = 0.0
+    category_id: str | None = None
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def to_dict(self) -> dict[str, Any]:
@@ -30,6 +79,7 @@ class TodoItem:
             "schedule_type": self.schedule_type.value,
             "anchor_date": self.anchor_date.isoformat(),
             "estimate_hours": self.estimate_hours,
+            "category_id": self.category_id,
         }
 
     @staticmethod
@@ -40,6 +90,7 @@ class TodoItem:
             schedule_type=ScheduleType(data["schedule_type"]),
             anchor_date=date.fromisoformat(data["anchor_date"]),
             estimate_hours=data["estimate_hours"],
+            category_id=data.get("category_id"),
         )
 
 
@@ -84,6 +135,7 @@ class ExecutionRecord:
 class AppData:
     items: list[TodoItem]
     records: list[ExecutionRecord]
+    categories: list[Category] = field(default_factory=list)
 
 
 def _clamped_day(anchor_day: int, target: date) -> int:

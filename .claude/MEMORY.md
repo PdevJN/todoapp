@@ -1,6 +1,6 @@
 # 作業状況メモ
 
-最終更新: 2026-08-30(作業ログの記録編集機能を追加)
+最終更新: 2026-08-30(カテゴリ機能を追加)
 
 ## 現在のブランチ
 
@@ -55,7 +55,21 @@ src/todoapp/
   - `KeyboardController`(`ui/keyboard.py`)の`e`キー処理を拡張し、作業ログが開いていて記録が選択されている場合はアイテム編集ではなく記録編集ダイアログを開くよう分岐
   - ドメイン層のテストを追加(`test/domain/test_service.py`の`edit_record`/`delete_record`、`test/domain/test_models.py`の`id`ラウンドトリップ・後方互換)。`uv run pytest` 26件全パス、`uv run mypy src test`通過
   - ユーザーの手動検証で選択ハイライトが薄いとの指摘を受け`bg-blue-50`→`bg-blue-200`に強調。また時刻入力を`ui.input(type=time)`から`ui.time_input`(ピッカー付き、`with-seconds`で秒まで選択可)に変更
-  - ユーザー確認済み。この一連の変更はまだ未コミット
+  - ユーザー確認済み。コミット済み(`a658443`)
+
+- ユーザー要望により「カテゴリ」機能を追加(計画は`/Users/jun/.claude/plans/tranquil-petting-squirrel.md`に保存、EnterPlanMode経由で要件を事前確認)。要件確認事項:
+  - 「種別」はカテゴリ自身が持つ自由入力の分類項目(選択式ではない)
+  - 新規アイテム登録(最下部入力欄+`Enter`)は従来どおり「未定」カテゴリで即登録。`Shift+Enter`の場合のみ登録直後にカテゴリ選択フォームが続けて開く
+  - 「カテゴリ一覧」「カテゴリ別集計」は本日の作業ログと同じ`ui.dialog()`形式で表示
+  - `Category`(`domain/models.py`): `name`/`kind`(種別)/`expiry_date`/`color`(作成時に固定パレットからランダム割当)。`TodoItem`に`category_id`を追加(`None`=「未定」)。`AppData`に`categories`を追加、JSON永続化も後方互換で対応
+  - `TodoService`に`add_category`/`edit_category`/`delete_category`(削除時は紐づくアイテムの`category_id`を`None`に戻す)/`set_item_category`/`category_for_item`/`category_today_totals`/`kind_today_totals`を追加
+  - 新規ダイアログ4つ: `CategoryListDialog`(`g`キー、メインパネルのみ、行クリック選択+`e`で編集)、`CategoryEditDialog`(名前/種別/有効期限日+削除ボタン)、`CategorySummaryDialog`(`T`=Shift+Tキー、メインパネル・編集一覧両方、本日のカテゴリ別累積時間+種別ごとの集計ラベル)、`CategoryPickDialog`(Shift+Enter登録時の軽量カテゴリ選択/新規作成ピッカー)
+  - `list_view.py`の`body-cell-name`スロットにカテゴリバッジを追加(期限切れは`❗️`付き)。メインパネルには要件どおりカテゴリバッジを表示しない
+  - `main_view.py`の新規登録入力欄は、プレーン`Enter`用(`keydown.enter.exact`)とShift+Enter用(`keydown.enter.shift`)の2リスナーに分離(Vueの`.exact`修飾子で同時発火を防止)。既存のIME`isComposing`ガードは両方に適用
+  - `keyboard.py`の`e`キー分岐にカテゴリ一覧の優先順位を追加、`g`(メイン画面限定)・`T`(メイン/編集一覧)を新設
+  - ドメイン層テストを追加(`Category`のラウンドトリップ・期限切れ判定、カテゴリCRUD、集計関数)。`uv run pytest` 37件全パス、`uv run mypy src test`通過
+  - ユーザーが実機で全機能(Shift+Enter登録、カテゴリ一覧/編集/削除、カテゴリ別集計、編集一覧バッジ、メインパネル非表示)を確認済み
+  - 追加要望: カテゴリ削除時、紐づくアイテムがある場合は「未定」に戻る旨の確認ダイアログを挟むよう`CategoryEditDialog`に確認用の`ui.dialog()`を追加(`_confirm_delete`で紐付き件数を数え、0件なら即削除・1件以上なら確認ダイアログ経由)。ユーザー確認済み。コミットはこれから
 
 ## 未実施・今後の検討事項
 

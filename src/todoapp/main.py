@@ -5,6 +5,10 @@ from nicegui import ui
 from todoapp.domain.service import TodoService
 from todoapp.repository.json_repository import JsonTodoRepository
 from todoapp.ui.app_state import AppState, Screen
+from todoapp.ui.category_edit_dialog import CategoryEditDialog
+from todoapp.ui.category_list_dialog import CategoryListDialog
+from todoapp.ui.category_pick_dialog import CategoryPickDialog
+from todoapp.ui.category_summary_dialog import CategorySummaryDialog
 from todoapp.ui.edit_dialog import EditDialog
 from todoapp.ui.keyboard import KeyboardController
 from todoapp.ui.list_view import ListView
@@ -23,8 +27,15 @@ def build_app() -> None:
         main_view.render.refresh()
         list_view.render.refresh()
         log_view.refresh()
+        category_list_dialog.refresh()
+        category_summary_dialog.refresh()
 
-    main_view = MainView(service, state, refresh_all=refresh_all)
+    category_list_dialog = CategoryListDialog(service, state)
+    category_edit_dialog = CategoryEditDialog(service, refresh_all=refresh_all)
+    category_summary_dialog = CategorySummaryDialog(service)
+    category_pick_dialog = CategoryPickDialog(service, refresh_all=refresh_all)
+
+    main_view = MainView(service, state, refresh_all=refresh_all, open_category_pick=category_pick_dialog.open_for)
     list_view = ListView(service, state)
     edit_dialog = EditDialog(service, refresh_all=refresh_all)
     log_view = LogView(service, state)
@@ -35,6 +46,10 @@ def build_app() -> None:
     edit_dialog.build()
     log_view.build()
     record_edit_dialog.build()
+    category_list_dialog.build()
+    category_edit_dialog.build()
+    category_summary_dialog.build()
+    category_pick_dialog.build()
 
     main_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.MAIN)
     list_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.LIST)
@@ -42,11 +57,23 @@ def build_app() -> None:
     keyboard = KeyboardController(
         service,
         state,
-        is_dialog_open=lambda: edit_dialog.is_open() or log_view.is_open() or record_edit_dialog.is_open(),
+        is_dialog_open=lambda: (
+            edit_dialog.is_open()
+            or log_view.is_open()
+            or record_edit_dialog.is_open()
+            or category_list_dialog.is_open()
+            or category_edit_dialog.is_open()
+            or category_summary_dialog.is_open()
+            or category_pick_dialog.is_open()
+        ),
         is_log_open=log_view.is_open,
+        is_category_list_open=category_list_dialog.is_open,
         open_edit_dialog=edit_dialog.open_for,
         open_log_dialog=log_view.open,
         open_record_edit_dialog=record_edit_dialog.open_for,
+        open_category_list=category_list_dialog.open,
+        open_category_edit_dialog=category_edit_dialog.open_for,
+        open_category_summary=category_summary_dialog.open,
         refresh_all=refresh_all,
     )
     keyboard.build()

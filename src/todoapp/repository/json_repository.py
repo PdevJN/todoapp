@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from todoapp.domain.models import AppData, ExecutionRecord, TodoItem
+from todoapp.domain.models import AppData, Category, ExecutionRecord, TodoItem
 
 SCHEMA_VERSION = 1
 
@@ -27,7 +27,8 @@ class JsonTodoRepository:
             raise UnsupportedSchemaVersionError(raw.get("version"))
         items = [TodoItem.from_dict(item) for item in raw["items"]]
         records = [ExecutionRecord.from_dict(record) for record in raw["records"]]
-        return AppData(items=items, records=records)
+        categories = [Category.from_dict(category) for category in raw.get("categories", [])]
+        return AppData(items=items, records=records, categories=categories)
 
     def save(self, data: AppData) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -35,5 +36,6 @@ class JsonTodoRepository:
             "version": SCHEMA_VERSION,
             "items": [item.to_dict() for item in data.items],
             "records": [record.to_dict() for record in data.records],
+            "categories": [category.to_dict() for category in data.categories],
         }
         self._path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

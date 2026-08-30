@@ -28,6 +28,7 @@ class EditDialog:
             self._schedule_select.on_value_change(self._update_anchor_visibility)
             self._anchor_input = ui.input(label="基準日").props("type=date").classes("w-full")
             self._estimate_input = ui.number(label="見積り時間(時間)", min=0, step=0.5).classes("w-full")
+            self._category_select = ui.select({None: "未定"}, label="カテゴリ", value=None).classes("w-full")
             with ui.row().classes("w-full justify-between mt-2"):
                 ui.button("削除", on_click=self._delete).props("flat color=negative")
                 with ui.row().classes("gap-2"):
@@ -46,6 +47,9 @@ class EditDialog:
         self._schedule_select.value = item.schedule_type.value
         self._anchor_input.value = item.anchor_date.isoformat()
         self._estimate_input.value = item.estimate_hours
+        category_options: dict[str | None, str] = {None: "未定"}
+        category_options.update({c.id: c.name for c in self._service.categories})
+        self._category_select.set_options(category_options, value=item.category_id)
         self._update_anchor_visibility()
         self.dialog.open()
 
@@ -68,6 +72,7 @@ class EditDialog:
             anchor_date=anchor_date,
             estimate_hours=float(self._estimate_input.value or 0.0),
         )
+        self._service.set_item_category(self._item_id, self._category_select.value)
         self.dialog.close()
         self._refresh_all()
 

@@ -1,6 +1,13 @@
 from datetime import date, datetime
 
-from todoapp.domain.models import ExecutionRecord, ScheduleType, TodoItem, is_due_today
+from todoapp.domain.models import (
+    Category,
+    ExecutionRecord,
+    ScheduleType,
+    TodoItem,
+    is_category_expired,
+    is_due_today,
+)
 
 
 def _item(schedule_type: ScheduleType, anchor_date: date) -> TodoItem:
@@ -66,3 +73,27 @@ def test_execution_record_from_dict_assigns_id_when_missing() -> None:
     }
     restored = ExecutionRecord.from_dict(data)
     assert restored.id
+
+
+def test_category_dict_roundtrip() -> None:
+    category = Category(name="仕事", kind="業務", expiry_date=date(2026, 12, 31))
+    restored = Category.from_dict(category.to_dict())
+    assert restored == category
+
+
+def test_category_from_dict_assigns_id_when_missing() -> None:
+    data = {"name": "仕事", "kind": "", "expiry_date": None}
+    restored = Category.from_dict(data)
+    assert restored.id
+    assert restored.color
+
+
+def test_is_category_expired_when_past_expiry_date() -> None:
+    category = Category(name="仕事", expiry_date=date(2026, 1, 1))
+    assert is_category_expired(category, date(2026, 1, 2))
+    assert not is_category_expired(category, date(2025, 12, 31))
+
+
+def test_is_category_expired_when_no_expiry_date() -> None:
+    category = Category(name="仕事")
+    assert not is_category_expired(category, date(2099, 1, 1))
