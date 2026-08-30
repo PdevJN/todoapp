@@ -17,6 +17,7 @@ UNCATEGORIZED_ID = "__uncategorized__"
 COLUMNS = [
     {"name": "name", "label": "カテゴリ", "field": "name", "align": "left"},
     {"name": "kind", "label": "種別", "field": "kind", "align": "left"},
+    {"name": "prj_code", "label": "PRJコード", "field": "prj_code", "align": "left"},
     {"name": "expiry", "label": "有効期限日", "field": "expiry", "align": "left"},
     {"name": "color", "label": "カラー", "field": "color", "align": "left"},
 ]
@@ -91,6 +92,7 @@ class CategoryListDialog(DialogMixin):
                 "id": UNCATEGORIZED_ID,
                 "name": "未定",
                 "kind": "-",
+                "prj_code": "-",
                 "expiry": "-",
                 "color": "grey",
                 "today_items": [item.name for item in today_items if item.category_id is None],
@@ -103,6 +105,7 @@ class CategoryListDialog(DialogMixin):
                     "id": category.id,
                     "name": category.name,
                     "kind": category.kind or "-",
+                    "prj_code": category.prj_code or "-",
                     "expiry": category.expiry_date.isoformat() if category.expiry_date else "-",
                     "color": category.color,
                     "today_items": today_item_names,

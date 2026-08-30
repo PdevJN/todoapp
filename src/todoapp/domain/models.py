@@ -36,6 +36,7 @@ class Category:
     kind: str = ""
     expiry_date: date | None = None
     color: str = field(default_factory=lambda: random.choice(CATEGORY_COLORS))
+    prj_code: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def to_dict(self) -> dict[str, Any]:
@@ -45,6 +46,7 @@ class Category:
             "kind": self.kind,
             "expiry_date": self.expiry_date.isoformat() if self.expiry_date else None,
             "color": self.color,
+            "prj_code": self.prj_code,
         }
 
     @staticmethod
@@ -56,6 +58,7 @@ class Category:
             kind=data.get("kind", ""),
             expiry_date=date.fromisoformat(expiry_date) if expiry_date else None,
             color=data.get("color") or random.choice(CATEGORY_COLORS),
+            prj_code=data.get("prj_code", ""),
         )
 
 

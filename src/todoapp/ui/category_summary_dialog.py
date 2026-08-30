@@ -65,5 +65,8 @@ class CategorySummaryDialog(DialogMixin):
         classes += " bg-blue-200" if is_selected else ""
         with ui.row().classes(classes) as row:
             row.on("click", lambda k=key: self._select(k))
-            ui.label(name).classes("font-medium")
+            with ui.row().classes("items-center gap-1"):
+                ui.label(name).classes("font-medium")
+                if category is not None and category.prj_code:
+                    ui.badge(category.prj_code).props("outline")
             ui.label(format_duration(seconds)).classes("text-gray-500 font-mono")

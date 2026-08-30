@@ -104,7 +104,7 @@ def test_execution_record_from_dict_assigns_id_when_missing() -> None:
 
 
 def test_category_dict_roundtrip() -> None:
-    category = Category(name="仕事", kind="業務", expiry_date=date(2026, 12, 31))
+    category = Category(name="仕事", kind="業務", expiry_date=date(2026, 12, 31), prj_code="PRJ-001")
     restored = Category.from_dict(category.to_dict())
     assert restored == category
 
@@ -114,6 +114,7 @@ def test_category_from_dict_assigns_id_when_missing() -> None:
     restored = Category.from_dict(data)
     assert restored.id
     assert restored.color
+    assert restored.prj_code == ""
 
 
 def test_is_category_expired_when_past_expiry_date() -> None:

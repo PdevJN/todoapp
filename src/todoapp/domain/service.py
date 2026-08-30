@@ -200,12 +200,15 @@ class TodoService:
         self._save()
         return category
 
-    def edit_category(self, category_id: str, *, name: str, kind: str, expiry_date: date | None, color: str) -> None:
+    def edit_category(
+        self, category_id: str, *, name: str, kind: str, expiry_date: date | None, color: str, prj_code: str
+    ) -> None:
         category = self._find_category(category_id)
         category.name = name
         category.kind = kind
         category.expiry_date = expiry_date
         category.color = color
+        category.prj_code = prj_code
         self._save()
 
     def delete_category(self, category_id: str) -> None:

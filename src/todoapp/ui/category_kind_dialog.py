@@ -42,6 +42,7 @@ class CategoryKindDialog(DialogMixin):
             kind=self._kind_input.value.strip(),
             expiry_date=category.expiry_date,
             color=category.color,
+            prj_code=category.prj_code,
         )
         self.dialog.close()
         self._refresh_all()

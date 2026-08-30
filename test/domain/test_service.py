@@ -231,13 +231,19 @@ def test_edit_category_updates_fields() -> None:
     category = service.add_category("仕事")
 
     service.edit_category(
-        category.id, name="プライベート", kind="私用", expiry_date=date(2026, 12, 31), color="teal"
+        category.id,
+        name="プライベート",
+        kind="私用",
+        expiry_date=date(2026, 12, 31),
+        color="teal",
+        prj_code="PRJ-001",
     )
 
     assert service.categories[0].name == "プライベート"
     assert service.categories[0].kind == "私用"
     assert service.categories[0].expiry_date == date(2026, 12, 31)
     assert service.categories[0].color == "teal"
+    assert service.categories[0].prj_code == "PRJ-001"
 
 
 def test_delete_category_clears_it_from_items() -> None:
@@ -467,7 +473,7 @@ def test_edit_category_unknown_id_raises_key_error() -> None:
 
     with pytest.raises(KeyError):
         service.edit_category(
-            "unknown-id", name="別名", kind="", expiry_date=None, color="teal"
+            "unknown-id", name="別名", kind="", expiry_date=None, color="teal", prj_code=""
         )
 
 

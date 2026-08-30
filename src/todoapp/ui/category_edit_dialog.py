@@ -32,6 +32,7 @@ class CategoryEditDialog(DialogMixin):
                 self._color_badge = ui.badge("").props("outline")
                 self._name_input = ui.input(label="カテゴリ名").classes("flex-grow")
             self._kind_input = ui.input(label="種別").classes("w-full")
+            self._prj_code_input = ui.input(label="PRJコード").classes("w-full")
             self._expiry_input = ui.input(label="有効期限日").props("type=date").classes("w-full")
             ui.label("カラー").classes("text-sm text-gray-500 -mb-1")
             with ui.row().classes("gap-1"):
@@ -52,6 +53,7 @@ class CategoryEditDialog(DialogMixin):
         self._category_id = category_id
         self._name_input.value = category.name
         self._kind_input.value = category.kind
+        self._prj_code_input.value = category.prj_code
         self._expiry_input.value = category.expiry_date.isoformat() if category.expiry_date else ""
         self._color_badge.text = category.name
         self._select_color(category.color)
@@ -76,6 +78,7 @@ class CategoryEditDialog(DialogMixin):
             kind=self._kind_input.value.strip(),
             expiry_date=expiry_date,
             color=self._selected_color,
+            prj_code=self._prj_code_input.value.strip(),
         )
         self.dialog.close()
         self._refresh_all()
