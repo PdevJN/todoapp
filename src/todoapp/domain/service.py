@@ -39,6 +39,12 @@ class TodoService:
                 return item
         raise KeyError(item_id)
 
+    def _find_record(self, record_id: str) -> ExecutionRecord:
+        for record in self._data.records:
+            if record.id == record_id:
+                return record
+        raise KeyError(record_id)
+
     def add_item(
         self,
         name: str,
@@ -147,3 +153,13 @@ class TodoService:
     def today_records(self, today: date) -> list[ExecutionRecord]:
         todays = [r for r in self._data.records if r.start_time.date() == today]
         return sorted(todays, key=lambda r: r.start_time)
+
+    def edit_record(self, record_id: str, *, start_time: datetime, end_time: datetime | None) -> None:
+        record = self._find_record(record_id)
+        record.start_time = start_time
+        record.end_time = end_time
+        self._save()
+
+    def delete_record(self, record_id: str) -> None:
+        self._data.records = [r for r in self._data.records if r.id != record_id]
+        self._save()

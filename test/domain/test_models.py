@@ -1,6 +1,6 @@
-from datetime import date
+from datetime import date, datetime
 
-from todoapp.domain.models import ScheduleType, TodoItem, is_due_today
+from todoapp.domain.models import ExecutionRecord, ScheduleType, TodoItem, is_due_today
 
 
 def _item(schedule_type: ScheduleType, anchor_date: date) -> TodoItem:
@@ -44,3 +44,25 @@ def test_todo_item_dict_roundtrip() -> None:
     item = _item(ScheduleType.WEEKLY, date(2026, 8, 24))
     restored = TodoItem.from_dict(item.to_dict())
     assert restored == item
+
+
+def test_execution_record_dict_roundtrip_preserves_id() -> None:
+    record = ExecutionRecord(
+        item_id="item-1",
+        item_name="散歩",
+        start_time=datetime(2026, 8, 30, 9, 0, 0),
+        end_time=datetime(2026, 8, 30, 9, 10, 0),
+    )
+    restored = ExecutionRecord.from_dict(record.to_dict())
+    assert restored == record
+
+
+def test_execution_record_from_dict_assigns_id_when_missing() -> None:
+    data = {
+        "item_id": "item-1",
+        "item_name": "散歩",
+        "start_time": "2026-08-30T09:00:00",
+        "end_time": None,
+    }
+    restored = ExecutionRecord.from_dict(data)
+    assert restored.id

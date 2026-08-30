@@ -49,6 +49,7 @@ class ExecutionRecord:
     item_name: str
     start_time: datetime
     end_time: datetime | None = None
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     @property
     def is_running(self) -> bool:
@@ -60,6 +61,7 @@ class ExecutionRecord:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "id": self.id,
             "item_id": self.item_id,
             "item_name": self.item_name,
             "start_time": self.start_time.isoformat(),
@@ -70,6 +72,7 @@ class ExecutionRecord:
     def from_dict(data: dict[str, Any]) -> ExecutionRecord:
         end_time = data["end_time"]
         return ExecutionRecord(
+            id=data.get("id") or uuid.uuid4().hex,
             item_id=data["item_id"],
             item_name=data["item_name"],
             start_time=datetime.fromisoformat(data["start_time"]),

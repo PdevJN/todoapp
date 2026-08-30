@@ -174,6 +174,36 @@ def test_remaining_hours_does_not_go_below_zero() -> None:
     assert service.remaining_hours(item.id) == 0.0
 
 
+def test_edit_record_updates_start_and_end_time() -> None:
+    service, _, clock = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30))
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+    record = service.records[0]
+
+    new_start = datetime(2026, 8, 30, 8, 0, 0)
+    new_end = datetime(2026, 8, 30, 8, 30, 0)
+    service.edit_record(record.id, start_time=new_start, end_time=new_end)
+
+    assert service.records[0].start_time == new_start
+    assert service.records[0].end_time == new_end
+    assert service.cumulative_seconds(item.id) == 1800
+
+
+def test_delete_record_removes_it() -> None:
+    service, _, clock = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30))
+    service.start(item.id)
+    clock.advance(60)
+    service.stop_running()
+    record = service.records[0]
+
+    service.delete_record(record.id)
+
+    assert service.records == []
+
+
 def test_remaining_seconds_reflects_small_amounts_of_execution() -> None:
     service, _, clock = _service()
     item = service.add_item(

@@ -4,13 +4,16 @@ from datetime import date, datetime
 
 from nicegui import ui
 
+from todoapp.domain.models import ExecutionRecord
 from todoapp.domain.service import TodoService
+from todoapp.ui.app_state import AppState
 from todoapp.ui.formatting import format_duration
 
 
 class LogView:
-    def __init__(self, service: TodoService) -> None:
+    def __init__(self, service: TodoService, state: AppState) -> None:
         self._service = service
+        self._state = state
 
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[32rem] gap-2"):
@@ -25,6 +28,14 @@ class LogView:
         self._render()
         self.dialog.open()
 
+    def refresh(self) -> None:
+        self._render.refresh()
+
+    def _select(self, record_id: str) -> None:
+        self._state.select_record(record_id)
+        self._render.refresh()
+
+    @ui.refreshable_method
     def _render(self) -> None:
         self.log_container.clear()
         with self.log_container:
@@ -33,9 +44,17 @@ class LogView:
                 ui.label("本日の記録はまだありません").classes("text-gray-400 italic")
                 return
             for record in records:
-                elapsed = format_duration(record.elapsed_seconds(record.end_time or datetime.now()))
-                start = record.start_time.strftime("%H:%M:%S")
-                end = record.end_time.strftime("%H:%M:%S") if record.end_time else "実行中"
-                with ui.row().classes("w-full justify-between border-b py-1"):
-                    ui.label(record.item_name).classes("font-medium")
-                    ui.label(f"{start} - {end} ({elapsed})").classes("text-gray-500 font-mono")
+                self._render_row(record)
+
+    def _render_row(self, record: ExecutionRecord) -> None:
+        is_selected = self._state.selected_record_id == record.id
+        elapsed = format_duration(record.elapsed_seconds(record.end_time or datetime.now()))
+        start = record.start_time.strftime("%H:%M:%S")
+        end = record.end_time.strftime("%H:%M:%S") if record.end_time else "実行中"
+
+        classes = "w-full justify-between items-center border-b py-1 px-1 rounded cursor-pointer"
+        classes += " bg-blue-200" if is_selected else ""
+        with ui.row().classes(classes) as row:
+            row.on("click", lambda rid=record.id: self._select(rid))
+            ui.label(record.item_name).classes("font-medium")
+            ui.label(f"{start} - {end} ({elapsed})").classes("text-gray-500 font-mono")

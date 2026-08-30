@@ -1,6 +1,6 @@
 # 作業状況メモ
 
-最終更新: 2026-08-30(編集一覧の列追加・行選択修正・バッジ併記)
+最終更新: 2026-08-30(作業ログの記録編集機能を追加)
 
 ## 現在のブランチ
 
@@ -46,6 +46,16 @@ src/todoapp/
   - 修正: `self.table.on("rowClick", self._on_row_click, ...)`を追加し、行のどこをクリックしても`state.selected_item_id`と`table.selected`(チェックボックス見た目)の両方を更新するようにした(`list_view.py`)
   - ユーザーが実機で選択・`e`キーとも動作することを確認済み
 - ユーザー要望により、編集一覧の「実行の曜日」列を削除し、代わりにメインパネルと同じ`q-badge outline`スタイルでアイテム名の右にスケジュール種別を併記するよう変更(QTableの`body-cell-name`スロットをカスタムテンプレートで上書き)。ユーザー確認済み
+
+- ユーザー要望により「本日の作業ログ」画面に、記録の選択・編集・削除機能を追加
+  - `ExecutionRecord`(`domain/models.py`)にUUID採番の`id`フィールドを追加(既存データとの後方互換のため`from_dict`は`id`欠落時に新規採番)
+  - `TodoService`(`domain/service.py`)に`edit_record(record_id, *, start_time, end_time)`と`delete_record(record_id)`を追加
+  - `AppState`(`ui/app_state.py`)に`selected_record_id`とその選択メソッドを追加(アイテム選択とは独立)
+  - `LogView`(`ui/log_view.py`)の各記録行をクリックで選択・ハイライトできるようにし、新規`RecordEditDialog`(`ui/record_edit_dialog.py`)で開始時刻・終了時刻の編集と記録の削除ができるようにした
+  - `KeyboardController`(`ui/keyboard.py`)の`e`キー処理を拡張し、作業ログが開いていて記録が選択されている場合はアイテム編集ではなく記録編集ダイアログを開くよう分岐
+  - ドメイン層のテストを追加(`test/domain/test_service.py`の`edit_record`/`delete_record`、`test/domain/test_models.py`の`id`ラウンドトリップ・後方互換)。`uv run pytest` 26件全パス、`uv run mypy src test`通過
+  - ユーザーの手動検証で選択ハイライトが薄いとの指摘を受け`bg-blue-50`→`bg-blue-200`に強調。また時刻入力を`ui.input(type=time)`から`ui.time_input`(ピッカー付き、`with-seconds`で秒まで選択可)に変更
+  - ユーザー確認済み。この一連の変更はまだ未コミット
 
 ## 未実施・今後の検討事項
 
