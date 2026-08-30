@@ -105,7 +105,10 @@ class KeyboardController:
         item_id = self._state.selected_item_id
 
         if e.key.enter:
-            if item_id is not None:
+            # ダイアログ(作業ログ等)にはフォーカス可能な入力欄が無い行もあり、
+            # その場合はキーがどこにもフォーカスされずここまで届いてしまう。
+            # ダイアログ表示中はメインパネルのアイテム実行トグルを抑制する
+            if item_id is not None and not self._is_dialog_open():
                 self._service.toggle_execution(item_id)
                 self._refresh_all()
             return
