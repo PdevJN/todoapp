@@ -4,12 +4,18 @@ from collections.abc import Callable
 from datetime import date, datetime
 
 from nicegui import ui
+from nicegui.elements.dark_mode import DarkMode
+from nicegui.elements.fab import FabAction
 from nicegui.events import GenericEventArguments, SortableEventArguments
 
 from todoapp.domain.models import ScheduleType, TodoItem
 from todoapp.domain.service import TodoService
+from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
 from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
+
+_THEME_ACTIVE_COLOR = "primary"
+_THEME_INACTIVE_COLOR = "grey-7"
 
 
 class MainView:
@@ -19,11 +25,18 @@ class MainView:
         state: AppState,
         refresh_all: Callable[[], None],
         open_category_pick: Callable[[str], None],
+        dark_mode: DarkMode,
+        initial_theme: Theme,
+        open_help: Callable[[], None],
     ) -> None:
         self._service = service
         self._state = state
         self._refresh_all = refresh_all
         self._open_category_pick = open_category_pick
+        self._dark_mode = dark_mode
+        self._current_theme: Theme = initial_theme
+        self._theme_actions: dict[Theme, FabAction] = {}
+        self._open_help = open_help
         self._new_item_input: ui.input | None = None
         self._elapsed_label: ui.label | None = None
         self._elapsed_item_id: str | None = None
@@ -35,6 +48,23 @@ class MainView:
     def build(self) -> ui.column:
         root = ui.column().classes("w-full gap-2 p-4")
         with root:
+            # position: absoluteだとrootの高さ(コンテンツ量やNiceGUI既定のページ余白の影響を
+            # 受け、実際のウィンドウの縦幅とは一致しない)を基準にしてしまう。ウィンドウそのもの
+            # (ビューポート)の四隅に固定するため、fixedを使う
+            with ui.fab("palette", color="grey-7").props("direction=left").classes("fixed top-4 right-4 z-10"):
+                self._theme_actions["dark"] = ui.fab_action(
+                    "dark_mode", label="ダーク", on_click=lambda: self._select_theme("dark")
+                ).tooltip("テーマ切り替え(ダーク)")
+                self._theme_actions["light"] = ui.fab_action(
+                    "light_mode", label="ライト", on_click=lambda: self._select_theme("light")
+                ).tooltip("テーマ切り替え(ライト)")
+                self._theme_actions["auto"] = ui.fab_action(
+                    "brightness_auto", label="自動", on_click=lambda: self._select_theme("auto")
+                ).tooltip("テーマ切り替え(自動)")
+            self._update_theme_highlight()
+            ui.button(icon="help", on_click=self._open_help).props("fab color=grey-7").classes(
+                "fixed bottom-4 right-4 z-10"
+            ).tooltip("キー操作ヘルプ")
             self.list_container = ui.column().classes("w-full gap-1")
             # delayを設定しないと、素早いクリック(特にダブルクリック)時のわずかなカーソルの
             # ブレでSortableJSがドラッグ開始と誤判定し、click/dblclickイベントが失われることがある
@@ -49,6 +79,21 @@ class MainView:
             self._new_item_input.on("keydown.enter.shift", self._add_item_and_pick_category, js_handler=ime_guard)
         ui.timer(1.0, self._tick)
         return root
+
+    def _select_theme(self, theme: Theme) -> None:
+        if theme == "dark":
+            self._dark_mode.enable()
+        elif theme == "light":
+            self._dark_mode.disable()
+        else:
+            self._dark_mode.auto()
+        self._current_theme = theme
+        self._update_theme_highlight()
+
+    def _update_theme_highlight(self) -> None:
+        for theme, action in self._theme_actions.items():
+            is_active = theme == self._current_theme
+            action.set_background_color(_THEME_ACTIVE_COLOR if is_active else _THEME_INACTIVE_COLOR)
 
     def _add_item(self) -> TodoItem | None:
         assert self._new_item_input is not None

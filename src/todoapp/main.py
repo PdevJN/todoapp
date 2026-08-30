@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 from nicegui import ui
+from nicegui.events import ValueChangeEventArguments
 
 from todoapp.domain.service import TodoService
+from todoapp.repository.config_repository import (
+    AppConfig,
+    ConfigRepository,
+    dark_mode_value_to_theme,
+    theme_to_dark_mode_value,
+)
 from todoapp.repository.json_repository import JsonTodoRepository
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.category_edit_dialog import CategoryEditDialog
@@ -12,6 +19,7 @@ from todoapp.ui.category_pick_dialog import CategoryPickDialog
 from todoapp.ui.category_summary_dialog import CategorySummaryDialog
 from todoapp.ui.confirm_dialog import ConfirmDialog
 from todoapp.ui.edit_dialog import EditDialog
+from todoapp.ui.help_dialog import HelpDialog
 from todoapp.ui.keyboard import KeyboardController
 from todoapp.ui.list_view import ListView
 from todoapp.ui.log_view import LogView
@@ -24,6 +32,28 @@ def build_app() -> None:
     repository = JsonTodoRepository()
     service = TodoService(repository)
     state = AppState()
+
+    config_repository = ConfigRepository()
+    config = config_repository.load()
+
+    def _on_theme_change(e: ValueChangeEventArguments[bool | None]) -> None:
+        config_repository.save(AppConfig(theme=dark_mode_value_to_theme(e.value)))
+
+    # value=Noneでシステムのダーク/ライト設定に追従する「自動」がデフォルトになる
+    dark_mode = ui.dark_mode(value=theme_to_dark_mode_value(config.theme), on_change=_on_theme_change)
+
+    # 選択中の行のハイライト・淡色テキストはライトモード向けの固定色(Tailwind)のため、
+    # ダークモードではデフォルトの明るい文字色と衝突して読めなくなる。
+    # Quasarがダーク判定時に付与する`body--dark`を起点に、背景・文字色をダーク向けに反転する
+    ui.add_css(
+        """
+        body.body--dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.28) !important; }
+        body.body--dark .bg-blue-200 { background-color: rgba(59, 130, 246, 0.4) !important; }
+        body.body--dark .text-gray-400,
+        body.body--dark .text-gray-500,
+        body.body--dark .text-gray-600 { color: #a1a1aa !important; }
+        """
+    )
 
     # ネイティブブラウザのCmd/Ctrl+A(ページ全体のテキスト選択)を抑止し、
     # 独自の全選択キー操作と見た目が競合しないようにする
@@ -101,8 +131,17 @@ def build_app() -> None:
     category_edit_dialog = CategoryEditDialog(service, refresh_all=refresh_all, confirm_dialog=confirm_dialog)
     category_summary_dialog = CategorySummaryDialog(service)
     category_pick_dialog = CategoryPickDialog(service, refresh_all=refresh_all)
+    help_dialog = HelpDialog()
 
-    main_view = MainView(service, state, refresh_all=refresh_all, open_category_pick=category_pick_dialog.open_for)
+    main_view = MainView(
+        service,
+        state,
+        refresh_all=refresh_all,
+        open_category_pick=category_pick_dialog.open_for,
+        dark_mode=dark_mode,
+        initial_theme=config.theme,
+        open_help=help_dialog.open,
+    )
     list_view = ListView(service, state)
     edit_dialog = EditDialog(service, refresh_all=refresh_all)
     log_view = LogView(service, state)
@@ -119,6 +158,7 @@ def build_app() -> None:
     category_pick_dialog.build()
     category_kind_dialog.build()
     confirm_dialog.build()
+    help_dialog.build()
 
     main_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.MAIN)
     list_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.LIST)
@@ -136,6 +176,7 @@ def build_app() -> None:
             or category_pick_dialog.is_open()
             or category_kind_dialog.is_open()
             or confirm_dialog.is_open()
+            or help_dialog.is_open()
         ),
         is_log_open=log_view.is_open,
         is_category_list_open=category_list_dialog.is_open,
