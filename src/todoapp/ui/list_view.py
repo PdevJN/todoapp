@@ -74,6 +74,14 @@ class ListView:
         self.table.selected = rows
         self._state.select_items(set(self._rendered_ids))
 
+    def has_selection(self) -> bool:
+        return bool(self._state.selected_item_id or self._state.selected_item_ids)
+
+    def clear_selection(self) -> None:
+        self.table.selected = []
+        self._state.select(None)
+        self._state.select_items(set())
+
     def _tick(self) -> None:
         if self._state.screen is Screen.LIST and self._service.running_record() is not None:
             self.render.refresh()

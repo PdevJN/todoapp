@@ -25,7 +25,7 @@ class CategoryListDialog:
         self._rendered_ids: list[str] = []
 
     def build(self) -> None:
-        with ui.dialog() as self.dialog, ui.card().classes("w-[36rem] gap-2"):
+        with ui.dialog().props("persistent") as self.dialog, ui.card().classes("w-[36rem] gap-2"):
             ui.label("カテゴリ一覧").classes("text-lg font-bold")
             self.table = ui.table(
                 columns=COLUMNS,
@@ -111,3 +111,14 @@ class CategoryListDialog:
         rows = [{"id": category_id} for category_id in self._rendered_ids]
         self.table.selected = rows
         self._state.select_categories(set(self._rendered_ids))
+
+    def has_selection(self) -> bool:
+        return bool(self._state.selected_category_id or self._state.selected_category_ids)
+
+    def clear_selection(self) -> None:
+        self.table.selected = []
+        self._state.select_category(None)
+        self._state.select_categories(set())
+
+    def close(self) -> None:
+        self.dialog.close()

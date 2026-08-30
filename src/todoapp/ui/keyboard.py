@@ -33,6 +33,11 @@ class KeyboardController:
         select_all_categories: Callable[[], None],
         is_main_select_all_active: Callable[[], bool],
         clear_main_select_all: Callable[[], None],
+        has_list_selection: Callable[[], bool],
+        clear_list_selection: Callable[[], None],
+        has_category_selection: Callable[[], bool],
+        clear_category_selection: Callable[[], None],
+        close_category_list: Callable[[], None],
         refresh_all: Callable[[], None],
     ) -> None:
         self._service = service
@@ -55,6 +60,11 @@ class KeyboardController:
         self._select_all_categories = select_all_categories
         self._is_main_select_all_active = is_main_select_all_active
         self._clear_main_select_all = clear_main_select_all
+        self._has_list_selection = has_list_selection
+        self._clear_list_selection = clear_list_selection
+        self._has_category_selection = has_category_selection
+        self._clear_category_selection = clear_category_selection
+        self._close_category_list = close_category_list
         self._refresh_all = refresh_all
 
     def build(self) -> None:
@@ -65,6 +75,13 @@ class KeyboardController:
             return
 
         if e.key.escape:
+            if self._is_category_list_open():
+                if self._has_category_selection():
+                    self._clear_category_selection()
+                    self._refresh_all()
+                else:
+                    self._close_category_list()
+                return
             if self._is_dialog_open():
                 return
             if self._state.screen is Screen.MAIN:
@@ -74,6 +91,11 @@ class KeyboardController:
                 if self._state.selected_item_id is not None or self._state.selected_item_ids:
                     self._state.select(None)
                     self._state.select_items(set())
+                    self._refresh_all()
+                    return
+            elif self._state.screen is Screen.LIST:
+                if self._has_list_selection():
+                    self._clear_list_selection()
                     self._refresh_all()
                     return
             self._state.toggle_screen()

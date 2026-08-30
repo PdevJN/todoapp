@@ -145,6 +145,11 @@ def build_app() -> None:
         select_all_categories=category_list_dialog.select_all,
         is_main_select_all_active=main_view.is_select_all_active,
         clear_main_select_all=main_view.clear_select_all,
+        has_list_selection=list_view.has_selection,
+        clear_list_selection=list_view.clear_selection,
+        has_category_selection=category_list_dialog.has_selection,
+        clear_category_selection=category_list_dialog.clear_selection,
+        close_category_list=category_list_dialog.close,
         refresh_all=refresh_all,
     )
     keyboard.build()
