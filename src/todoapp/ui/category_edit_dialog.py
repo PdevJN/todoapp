@@ -5,6 +5,7 @@ from datetime import date
 
 from nicegui import ui
 
+from todoapp.domain.models import CATEGORY_COLORS
 from todoapp.domain.service import TodoService
 from todoapp.ui.confirm_dialog import ConfirmDialog
 
@@ -20,6 +21,8 @@ class CategoryEditDialog:
         self._refresh_all = refresh_all
         self._confirm_dialog = confirm_dialog
         self._category_id: str | None = None
+        self._selected_color = CATEGORY_COLORS[0]
+        self._color_swatches: dict[str, ui.button] = {}
 
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-96 gap-2"):
@@ -29,6 +32,12 @@ class CategoryEditDialog:
                 self._name_input = ui.input(label="カテゴリ名").classes("flex-grow")
             self._kind_input = ui.input(label="種別").classes("w-full")
             self._expiry_input = ui.input(label="有効期限日").props("type=date").classes("w-full")
+            ui.label("カラー").classes("text-sm text-gray-500 -mb-1")
+            with ui.row().classes("gap-1"):
+                for color in CATEGORY_COLORS:
+                    swatch = ui.button(on_click=lambda _, c=color: self._select_color(c))
+                    swatch.props(f"round unelevated color={color} size=sm")
+                    self._color_swatches[color] = swatch
             with ui.row().classes("w-full justify-between mt-2"):
                 ui.button("削除", on_click=self._confirm_delete).props("flat color=negative")
                 with ui.row().classes("gap-2"):
@@ -47,8 +56,17 @@ class CategoryEditDialog:
         self._kind_input.value = category.kind
         self._expiry_input.value = category.expiry_date.isoformat() if category.expiry_date else ""
         self._color_badge.text = category.name
-        self._color_badge.props(f"color={category.color}")
+        self._select_color(category.color)
         self.dialog.open()
+
+    def _select_color(self, color: str) -> None:
+        self._selected_color = color
+        self._color_badge.props(f"color={color}")
+        for swatch_color, swatch in self._color_swatches.items():
+            if swatch_color == color:
+                swatch.classes(add="ring-2 ring-offset-1 ring-black")
+            else:
+                swatch.classes(remove="ring-2 ring-offset-1 ring-black")
 
     def _save(self) -> None:
         if self._category_id is None:
@@ -59,6 +77,7 @@ class CategoryEditDialog:
             name=self._name_input.value.strip(),
             kind=self._kind_input.value.strip(),
             expiry_date=expiry_date,
+            color=self._selected_color,
         )
         self.dialog.close()
         self._refresh_all()

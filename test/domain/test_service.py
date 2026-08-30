@@ -228,11 +228,14 @@ def test_edit_category_updates_fields() -> None:
     service, _, _ = _service()
     category = service.add_category("仕事")
 
-    service.edit_category(category.id, name="プライベート", kind="私用", expiry_date=date(2026, 12, 31))
+    service.edit_category(
+        category.id, name="プライベート", kind="私用", expiry_date=date(2026, 12, 31), color="teal"
+    )
 
     assert service.categories[0].name == "プライベート"
     assert service.categories[0].kind == "私用"
     assert service.categories[0].expiry_date == date(2026, 12, 31)
+    assert service.categories[0].color == "teal"
 
 
 def test_delete_category_clears_it_from_items() -> None:
