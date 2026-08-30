@@ -38,6 +38,9 @@ class MainView:
         self._theme_actions: dict[Theme, FabAction] = {}
         self._open_help = open_help
         self._new_item_input: ui.input | None = None
+        self._running_indicator: ui.row | None = None
+        self._running_name_label: ui.label | None = None
+        self._running_remaining_label: ui.label | None = None
         self._elapsed_label: ui.label | None = None
         self._elapsed_item_id: str | None = None
         self._rendered_item_ids: list[str] = []
@@ -65,6 +68,15 @@ class MainView:
             ui.button(icon="help", on_click=self._open_help).props("fab color=grey-7").classes(
                 "fixed bottom-4 right-4 z-10"
             ).tooltip("キー操作ヘルプ")
+            # 実行中アイテムを常に把握できるよう、最下部にウィンドウ基準で浮かせて表示する。
+            # 背景は透過(30%)にして、下にあるアイテム一覧が透けて見えるようにする
+            with ui.row().classes(
+                "fixed bottom-20 left-1/2 -translate-x-1/2 items-center gap-2 "
+                "bg-black/30 text-white px-4 py-2 rounded-full z-10 pointer-events-none"
+            ) as self._running_indicator:
+                ui.spinner("hourglass", color="primary")
+                self._running_name_label = ui.label().classes("font-medium text-lg")
+                self._running_remaining_label = ui.label().classes("font-mono text-lg")
             self.list_container = ui.column().classes("w-full gap-1")
             # delayを設定しないと、素早いクリック(特にダブルクリック)時のわずかなカーソルの
             # ブレでSortableJSがドラッグ開始と誤判定し、click/dblclickイベントが失われることがある
@@ -177,11 +189,30 @@ class MainView:
         self._refresh_all()
 
     def _tick(self) -> None:
+        self._update_running_indicator()
         running = self._service.running_record()
         if running is None or self._elapsed_label is None:
             return
         if self._elapsed_item_id == running.item_id:
             self._elapsed_label.set_text(format_duration(running.elapsed_seconds(datetime.now())))
+
+    def _update_running_indicator(self) -> None:
+        assert self._running_indicator is not None
+        assert self._running_name_label is not None
+        assert self._running_remaining_label is not None
+        running = self._service.running_record()
+        if running is None:
+            self._running_indicator.set_visibility(False)
+            return
+        self._running_indicator.set_visibility(True)
+        self._running_name_label.set_text(running.item_name)
+        self._running_remaining_label.set_text(self._remaining_display(running.item_id))
+
+    def _remaining_display(self, item_id: str) -> str:
+        item = next((i for i in self._service.items if i.id == item_id), None)
+        if item is None or item.estimate_hours <= 0:
+            return "-"
+        return format_duration(self._service.remaining_seconds(item_id))
 
     @ui.refreshable_method
     def render(self) -> None:
@@ -195,9 +226,10 @@ class MainView:
             self._rendered_item_ids = [item.id for item in items]
             if not items:
                 ui.label("").classes("text-gray-400 italic h-8")
-                return
-            for item in items:
-                self._render_row(item, today)
+            else:
+                for item in items:
+                    self._render_row(item, today)
+        self._update_running_indicator()
 
     def _render_row(self, item: TodoItem, today: date) -> None:
         running = self._service.running_record()

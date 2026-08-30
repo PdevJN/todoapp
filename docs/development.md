@@ -13,10 +13,20 @@ uv run mypy src test           # 型チェック(strict)
 
 ```
 src/todoapp/
-├── domain/        # NiceGUIに依存しないドメインロジック(TodoItem, TodoService等)
-├── repository/     # JSON永続化(~/.todoapp/todos.json, ~/.todoapp/config.json)
-├── ui/              # NiceGUI画面(main_view/edit_dialog/list_view/log_view/keyboard等)
-└── main.py          # エントリーポイント
+├── domain/        # NiceGUIに依存しないドメインロジック(TodoItem, Category, TodoService等)
+├── repository/     # JSON永続化(json_repository.py: todos.json / config_repository.py: config.json)
+├── ui/              # NiceGUI画面
+│   ├── main_view.py             # メインパネル(一覧・新規登録・テーマFAB・実行中フローティング表示)
+│   ├── list_view.py             # 編集一覧
+│   ├── log_view.py              # 本日の作業ログ
+│   ├── category_*.py            # カテゴリ一覧/編集/種別入力/選択/集計の各ダイアログ
+│   ├── edit_dialog.py           # アイテム編集フォーム
+│   ├── record_edit_dialog.py    # 記録編集フォーム
+│   ├── help_dialog.py           # キー操作ヘルプ
+│   ├── confirm_dialog.py        # 共通の削除確認ダイアログ
+│   ├── keyboard.py              # グローバルキー操作の振り分け
+│   └── app_state.py / formatting.py
+└── main.py          # エントリーポイント(画面・ダイアログの組み立て)
 ```
 
 ## 保存先ファイル
