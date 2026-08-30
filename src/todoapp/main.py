@@ -47,7 +47,7 @@ def build_app() -> None:
 
 
 def main() -> None:
-    ui.run(native=True, window_size=(480, 720), title="TODO", reload=False)
+    ui.run(native=True, window_size=(620, 720), title="TODO", reload=False)
 
 
 if __name__ == "__main__":
