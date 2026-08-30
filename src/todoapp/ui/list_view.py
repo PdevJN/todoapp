@@ -29,6 +29,17 @@ class ListView:
         root = ui.column().classes("w-full gap-2 p-4")
         with root:
             ui.label("編集一覧").classes("text-lg font-bold")
+            with ui.row().classes("w-full gap-2 items-end"):
+                self._name_filter = ui.input(label="アイテム名で絞り込み").classes("flex-grow")
+                self._name_filter.on_value_change(self.render.refresh)
+                self._schedule_filter = ui.select(
+                    SCHEDULE_LABELS, label="実行の曜日", multiple=True
+                ).classes("w-48")
+                self._schedule_filter.on_value_change(self.render.refresh)
+                self._anchor_filter = ui.input(
+                    label="基準日", value=date.today().isoformat()
+                ).props("type=date")
+                self._anchor_filter.on_value_change(self.render.refresh)
             self.table = ui.table(
                 columns=COLUMNS,
                 rows=[],
@@ -89,8 +100,19 @@ class ListView:
     @ui.refreshable_method
     def render(self) -> None:
         today = date.today()
+        name_filter = self._name_filter.value.strip()
+        schedule_filter = set(self._schedule_filter.value or [])
+        anchor_filter_value = self._anchor_filter.value
+        anchor_filter = date.fromisoformat(anchor_filter_value) if anchor_filter_value else None
+
         rows = []
         for item in self._service.items:
+            if name_filter and name_filter not in item.name:
+                continue
+            if schedule_filter and item.schedule_type.value not in schedule_filter:
+                continue
+            if anchor_filter is not None and item.anchor_date != anchor_filter:
+                continue
             cumulative = self._service.cumulative_seconds(item.id)
             remaining = self._service.remaining_seconds(item.id)
             category = self._service.category_for_item(item.id)

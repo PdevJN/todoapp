@@ -1,10 +1,10 @@
 # 作業状況メモ
 
-最終更新: 2026-08-30(カテゴリ一覧にカテゴリ登録機能を追加)
+最終更新: 2026-08-30(カテゴリにPRJコードを追加、アイテム編集フォームのカテゴリ選択バッジ表示の不具合修正)
 
 ## 現在のブランチ
 
-`feature/todo-app-mvp`(`develop`から分岐、git-flow運用)
+`develop`(`feature/todo-app-mvp`は`9ead194`で`develop`へマージ済み。以前の本メモの記述はマージ前の状態のまま更新が追いついていなかったため、今回のセッション冒頭で気づいて整理した)
 
 ## これまでの作業
 
@@ -132,9 +132,37 @@ src/todoapp/
   - ドメイン層(`add_category`/`edit_category`)は既存のものをそのまま利用したため、新規のドメインテストは追加していない。`uv run pytest`(41件)・`uv run mypy src test`とも問題なし
   - ユーザーが実機で「Enter即登録」「Shift+Enterでの種別入力フォーム表示・保存反映」「IME変換中のEnter無反応」を確認済み
 
+## 今回(2026-08-30 四度目の再開分)の作業
+
+- セッション冒頭で`.claude/MEMORY.md`の記述が古いことに気づき整理。実際には`feature/todo-app-mvp`は既に`develop`へマージ済み(`9ead194`)で、その後もテスト拡充・ダークモードFAB・カテゴリ登録機能などが追加されていた。`uv run pytest`(79件)・`uv run mypy`とも問題なし
+
+- ユーザー要望により、`カテゴリ`の概念に`PRJコード`(自由入力の文字列)を追加。要件確認事項:
+  - カテゴリ一覧画面はテーブルに列を追加し、カテゴリ編集フォームにも入力欄を追加
+  - カテゴリ一覧最下部の新規登録欄(Enter/Shift+Enter)では登録時は空のまま、後から編集フォームで設定
+  - `Category`(`domain/models.py`)に`prj_code: str = ""`を追加(to_dict/from_dict・永続化も対応)、`TodoService.edit_category`に`prj_code`を必須キーワードとして追加(`category_kind_dialog.py`など既存の呼び出し元もすべて追随)
+  - `category_edit_dialog.py`に「PRJコード」入力欄を追加、`category_list_dialog.py`のテーブルに「PRJコード」列を追加(未定行は「-」)
+  - `category_summary_dialog.py`(カテゴリ別集計、Shift+T)の各カテゴリ行で、カテゴリ名の横にPRJコードを`q-badge`表示(未設定時は非表示)
+  - ドメイン層テストを追加。`uv run pytest`(79件)・`uv run mypy`とも問題なし。ユーザー確認済み。コミット済み(`48af499`)
+  - 余談: このやり取りの中で、`uv run todoapp`実行時に出る`_valueForTIProperty`/`imkxpc_getApplicationProperty`ログについて質問を受けた。調査の結果、macOSのIMKit(日本語入力システム)と`pywebview`が使う`WKWebView`間の既知の相互作用によるもので、他の多数のmacOSアプリ(Flutter・Java Swing・scrcpyなど)でも同様の報告がある無害なシステムログと判断(アプリのバグではなく対応不要)
+
+- ユーザー要望により、メインパネル・編集一覧どちらの`e`キー編集からも共通で開くアイテム編集フォーム(`edit_dialog.py`)の「カテゴリ」選択欄(`ui.select`)で、その選択肢自体(ドロップダウンの各項目)にPRJコード→種別の順でバッジ表示するよう追加(値が空のカテゴリは非表示)。要件確認の経緯:
+  - 当初、ダイアログ内の別行にバッジを表示する実装をしたが、ユーザーから「編集画面の中ではなく、カテゴリの選択アイテムに表示する」と指摘を受け、`ui.select`の`option`スロット(ドロップダウンの各選択肢)自体にバッジを出す方式に作り直した
+  - 最初の`option`スロット実装は、NiceGUI内部の`_props["options"]`に`prj_code`/`kind`を直接追加する方式だったが、ユーザーが実機で「1回目は表示されるが2回目は表示されないことがある」を発見。原因はNiceGUIの`ChoiceElement.update()`(`ui.select`の内部実装)が`_props["options"]`を毎回`{value,label}`のみへ再構築してしまうことで、`suspend_updates()`+ベースクラスの`Element.update()`直接呼び出しでこれを回避する応急処置をいったん入れたが、非同期の更新処理と競合しうる不安定な実装だった
+  - 最終的に、カテゴリ名・PRJコード・種別を1つのラベル文字列に区切り文字(`\x1f`)で埋め込み、`option`スロット・`selected-item`スロットの両方でラベルを分解して表示する方式に変更。NiceGUI標準の`set_options()`フローにそのまま乗るため、内部実装への介入が不要になり安定した
+  - 教訓: NiceGUIの`ui.select`で選択肢にカスタムメタデータ(バッジ表示用の追加情報など)を持たせたい場合、`_props["options"]`への直接介入は`ChoiceElement.update()`と競合し不安定になる。ラベル文字列に区切り文字で埋め込みスロット側で分解する方式の方が安全
+  - `nicegui.testing.User`を使った一時テストで、同一ダイアログに`open_for()`を複数回連続で呼んでも毎回正しくラベルにメタデータが含まれることを検証(検証用の一時ファイルは削除済み)
+  - `uv run pytest`(79件)・`uv run mypy`とも問題なし。ユーザーが実機で複数回の表示安定性を確認済み
+
+- ユーザー要望により、`編集一覧`画面に3種類のフィルタを追加(表示位置は「編集一覧」タイトルと一覧テーブルの間)。要件確認事項:
+  - `実行の曜日`フィルタは複数選択可能(未選択なら全種別表示)
+  - `基準日`フィルタはデフォルトで本日の日付が入っており、変更すればその日付で絞り込む(空にすれば絞り込みなし)
+  - `list_view.py`の`ListView.build()`にフィルタ用の`ui.input`(アイテム名、部分一致)・`ui.select(multiple=True)`(実行の曜日)・`ui.input(type=date)`(基準日、初期値は本日)を追加し、いずれの値変更でも`render.refresh()`を呼んで再描画するようにした。`render()`内で3条件をAND評価してから行を構築する
+  - `nicegui.testing.User`を使った一時テストで検証。その過程で「`view.render.refresh()`を呼んだ直後に`_rendered_ids`を読むと、まだ再描画が完了しておらず古い値が見える」という`@ui.refreshable_method`の非同期な挙動に気づいた。これはテストコード側で`await`を挟む必要があるだけで、実装自体のバグではなかった(実際のブラウザ操作では問題にならない)。教訓として、NiceGUIの`refreshable`メソッドの効果をテストで確認する際は、`refresh()`呼び出し直後に同期的に結果を読まず、`asyncio.sleep(0)`を数回挟むなどして完了を待つ必要がある
+  - `uv run pytest`(79件)・`uv run mypy`とも問題なし。ユーザーが実機で3種類のフィルタの動作を確認済み
+
 ## 未実施・今後の検討事項
 
-- `develop`や`main`へのマージはまだ行っていない
+- 特になし(直近の変更はコミット予定)
 
 ## 運用ルール(このセッションで確定した方針)
 
