@@ -6,6 +6,7 @@
 mindmap
   root((todoapp))
     .claude
+    docs
     src
     test
     README.md
