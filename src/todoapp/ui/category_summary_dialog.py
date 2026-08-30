@@ -52,7 +52,7 @@ class CategorySummaryDialog:
             if not kind_totals:
                 ui.label("-").classes("text-gray-400")
             for kind in sorted(kind_totals):
-                ui.label(f"{kind}: {format_duration(kind_totals[kind])}").classes("font-mono")
+                ui.label(f"{kind}: {format_duration(kind_totals[kind])}").classes("font-mono text-right w-full")
 
     def _select(self, key: str) -> None:
         self._selected_key = key
