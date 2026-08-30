@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 
 from nicegui import ui
 from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 
+from todoapp.domain.models import Category
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
 
@@ -19,10 +21,19 @@ COLUMNS = [
 
 
 class CategoryListDialog:
-    def __init__(self, service: TodoService, state: AppState) -> None:
+    def __init__(
+        self,
+        service: TodoService,
+        state: AppState,
+        refresh_all: Callable[[], None],
+        open_category_kind: Callable[[str], None],
+    ) -> None:
         self._service = service
         self._state = state
+        self._refresh_all = refresh_all
+        self._open_category_kind = open_category_kind
         self._rendered_ids: list[str] = []
+        self._new_category_input: ui.input | None = None
 
     def build(self) -> None:
         with ui.dialog().props("persistent") as self.dialog, ui.card().classes("w-[36rem] gap-2"):
@@ -56,6 +67,13 @@ class CategoryListDialog:
                 </q-td>
                 """,
             )
+            self._new_category_input = ui.input(placeholder="新しいカテゴリ名を入力してEnter(Shift+Enterで種別入力)").classes(
+                "w-full"
+            )
+            # IME変換確定のEnterでも発火するため、変換中(isComposing)は無視する
+            ime_guard = "(...args) => { if (!args[0].isComposing && args[0].keyCode !== 229) emit(...args); }"
+            self._new_category_input.on("keydown.enter.exact", self._add_category, js_handler=ime_guard)
+            self._new_category_input.on("keydown.enter.shift", self._add_category_and_pick_kind, js_handler=ime_guard)
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
 
     def is_open(self) -> bool:
@@ -92,6 +110,21 @@ class CategoryListDialog:
         # 「未定」は実体を持たないカテゴリのため、選択・編集・削除の対象からは除外する
         self._rendered_ids = [str(row["id"]) for row in rows if row["id"] != UNCATEGORIZED_ID]
         self.table.update_rows(rows, clear_selection=False)
+
+    def _add_category(self) -> Category | None:
+        assert self._new_category_input is not None
+        name = self._new_category_input.value.strip()
+        if not name:
+            return None
+        category = self._service.add_category(name)
+        self._new_category_input.value = ""
+        self._refresh_all()
+        return category
+
+    def _add_category_and_pick_kind(self) -> None:
+        category = self._add_category()
+        if category is not None:
+            self._open_category_kind(category.id)
 
     def _on_select(self, e: TableSelectionEventArguments) -> None:
         ids = {row["id"] for row in e.selection if row["id"] != UNCATEGORIZED_ID}

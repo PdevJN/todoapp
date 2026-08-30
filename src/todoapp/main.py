@@ -6,6 +6,7 @@ from todoapp.domain.service import TodoService
 from todoapp.repository.json_repository import JsonTodoRepository
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.category_edit_dialog import CategoryEditDialog
+from todoapp.ui.category_kind_dialog import CategoryKindDialog
 from todoapp.ui.category_list_dialog import CategoryListDialog
 from todoapp.ui.category_pick_dialog import CategoryPickDialog
 from todoapp.ui.category_summary_dialog import CategorySummaryDialog
@@ -90,7 +91,13 @@ def build_app() -> None:
             do_delete()
 
     confirm_dialog = ConfirmDialog()
-    category_list_dialog = CategoryListDialog(service, state)
+    category_kind_dialog = CategoryKindDialog(service, refresh_all=refresh_all)
+    category_list_dialog = CategoryListDialog(
+        service,
+        state,
+        refresh_all=refresh_all,
+        open_category_kind=category_kind_dialog.open_for,
+    )
     category_edit_dialog = CategoryEditDialog(service, refresh_all=refresh_all, confirm_dialog=confirm_dialog)
     category_summary_dialog = CategorySummaryDialog(service)
     category_pick_dialog = CategoryPickDialog(service, refresh_all=refresh_all)
@@ -110,6 +117,7 @@ def build_app() -> None:
     category_edit_dialog.build()
     category_summary_dialog.build()
     category_pick_dialog.build()
+    category_kind_dialog.build()
     confirm_dialog.build()
 
     main_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.MAIN)
@@ -126,6 +134,7 @@ def build_app() -> None:
             or category_edit_dialog.is_open()
             or category_summary_dialog.is_open()
             or category_pick_dialog.is_open()
+            or category_kind_dialog.is_open()
             or confirm_dialog.is_open()
         ),
         is_log_open=log_view.is_open,
