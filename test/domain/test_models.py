@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from todoapp.domain.models import (
     Category,
@@ -37,6 +37,34 @@ def test_monthly_clamps_to_last_day_of_short_month() -> None:
     anchor = date(2026, 1, 31)
     item = _item(ScheduleType.MONTHLY, anchor)
     assert is_due_today(item, date(2026, 2, 28))
+
+
+def test_monthly_is_not_due_the_day_after_the_clamped_day() -> None:
+    # 境界値分析: 月末調整される側の上限境界(調整後の月末日の翌日=翌月1日)は対象外
+    anchor = date(2026, 1, 31)
+    item = _item(ScheduleType.MONTHLY, anchor)
+    assert not is_due_today(item, date(2026, 3, 1))
+
+
+def test_monthly_clamps_to_leap_day_in_leap_year() -> None:
+    # 境界値分析: 基準日30日が閏年2月は29日(閏日)にクランプされ、
+    # 平年のクランプ先(28日)とは異なる境界になることを確認する
+    anchor = date(2026, 1, 30)
+    item = _item(ScheduleType.MONTHLY, anchor)
+    assert is_due_today(item, date(2028, 2, 29))
+    assert not is_due_today(item, date(2028, 2, 28))
+
+
+def test_weekly_is_due_exactly_one_week_later_across_year_boundary() -> None:
+    # 境界値分析: 年またぎでも「同じ曜日」の判定が7日後の境界で成立することを確認する
+    anchor = date(2025, 12, 29)
+    item = _item(ScheduleType.WEEKLY, anchor)
+    one_week_later = anchor + timedelta(days=7)
+    assert one_week_later.year != anchor.year
+    assert is_due_today(item, anchor)  # 基準日そのものも対象日になる
+    assert is_due_today(item, one_week_later)
+    assert not is_due_today(item, anchor + timedelta(days=1))
+    assert not is_due_today(item, anchor + timedelta(days=6))
 
 
 def test_one_time_is_due_only_on_anchor_date() -> None:
@@ -97,3 +125,10 @@ def test_is_category_expired_when_past_expiry_date() -> None:
 def test_is_category_expired_when_no_expiry_date() -> None:
     category = Category(name="仕事")
     assert not is_category_expired(category, date(2099, 1, 1))
+
+
+def test_is_category_expired_on_the_expiry_date_itself_is_not_expired() -> None:
+    # 境界値分析: 判定は`expiry_date < today`(厳密未満)のため、
+    # 有効期限日当日はまだ「期限切れ」とはみなされない
+    category = Category(name="仕事", expiry_date=date(2026, 1, 1))
+    assert not is_category_expired(category, date(2026, 1, 1))
