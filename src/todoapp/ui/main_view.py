@@ -28,6 +28,7 @@ class MainView:
         self._elapsed_label: ui.label | None = None
         self._elapsed_item_id: str | None = None
         self._rendered_item_ids: list[str] = []
+        self._row_elements: dict[str, ui.row] = {}
         self._select_anchor_index: int | None = None
         self._select_all_active = False
 
@@ -35,7 +36,9 @@ class MainView:
         root = ui.column().classes("w-full gap-2 p-4")
         with root:
             self.list_container = ui.column().classes("w-full gap-1")
-            self.list_container.make_sortable(on_end=self._on_reorder)
+            # delayを設定しないと、素早いクリック(特にダブルクリック)時のわずかなカーソルの
+            # ブレでSortableJSがドラッグ開始と誤判定し、click/dblclickイベントが失われることがある
+            self.list_container.make_sortable(on_end=self._on_reorder, options={"delay": 150})
             self.render()
             self._new_item_input = ui.input(placeholder="新しいアイテムを入力してEnter(Shift+Enterでカテゴリ選択)").classes(
                 "w-full"
@@ -82,6 +85,7 @@ class MainView:
         ctrl = bool(modifiers["ctrlKey"] or modifiers["metaKey"])
         shift = bool(modifiers["shiftKey"])
         index = self._rendered_item_ids.index(item_id) if item_id in self._rendered_item_ids else None
+        previous_selection = set(self._state.selected_item_ids)
 
         if shift and self._select_anchor_index is not None and index is not None:
             lo, hi = sorted((self._select_anchor_index, index))
@@ -99,7 +103,22 @@ class MainView:
             self._select_anchor_index = index
 
         self._state.select(item_id)
-        self.render.refresh()
+        # 選択のたびにrender.refresh()で全行を作り直すと、ダブルクリックの1回目のクリックで
+        # 対象行のDOM要素自体が入れ替わってしまい、2回目のクリックとの間でdblclickが
+        # 成立しないことがある。選択に伴う見た目の変化はCSSクラスの差分更新に留め、
+        # 行のDOM要素をダブルクリック中も維持する
+        self._update_selection_classes(previous_selection)
+
+    def _update_selection_classes(self, previous_selection: set[str]) -> None:
+        changed_ids = previous_selection ^ self._state.selected_item_ids
+        for changed_id in changed_ids:
+            row = self._row_elements.get(changed_id)
+            if row is None:
+                continue
+            if changed_id in self._state.selected_item_ids:
+                row.classes(add="border-primary bg-blue-50", remove="border-transparent")
+            else:
+                row.classes(add="border-transparent", remove="border-primary bg-blue-50")
 
     def _toggle(self, item_id: str) -> None:
         self._select_all_active = False
@@ -123,6 +142,7 @@ class MainView:
     def render(self) -> None:
         self._elapsed_label = None
         self._elapsed_item_id = None
+        self._row_elements = {}
         self.list_container.clear()
         with self.list_container:
             today = date.today()
@@ -143,6 +163,7 @@ class MainView:
         classes += " border-primary bg-blue-50" if is_selected else " border-transparent"
 
         with ui.row().classes(classes) as row:
+            self._row_elements[item.id] = row
             row.on("click", lambda e, i=item.id: self._on_row_click(i, e), args=["ctrlKey", "metaKey", "shiftKey"])
             row.on("dblclick", lambda i=item.id: self._toggle(i))
             ui.label(item.name).classes("font-medium")
