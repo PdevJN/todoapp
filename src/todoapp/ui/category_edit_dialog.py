@@ -6,12 +6,19 @@ from datetime import date
 from nicegui import ui
 
 from todoapp.domain.service import TodoService
+from todoapp.ui.confirm_dialog import ConfirmDialog
 
 
 class CategoryEditDialog:
-    def __init__(self, service: TodoService, refresh_all: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        service: TodoService,
+        refresh_all: Callable[[], None],
+        confirm_dialog: ConfirmDialog,
+    ) -> None:
         self._service = service
         self._refresh_all = refresh_all
+        self._confirm_dialog = confirm_dialog
         self._category_id: str | None = None
 
     def build(self) -> None:
@@ -27,12 +34,6 @@ class CategoryEditDialog:
                 with ui.row().classes("gap-2"):
                     ui.button("キャンセル", on_click=self.dialog.close).props("flat")
                     ui.button("保存", on_click=self._save)
-
-        with ui.dialog() as self._confirm_dialog, ui.card().classes("w-80 gap-2"):
-            self._confirm_message = ui.label()
-            with ui.row().classes("w-full justify-end gap-2"):
-                ui.button("キャンセル", on_click=self._confirm_dialog.close).props("flat")
-                ui.button("削除する", on_click=self._delete).props("color=negative")
 
     def is_open(self) -> bool:
         return bool(self.dialog.value)
@@ -65,20 +66,19 @@ class CategoryEditDialog:
     def _confirm_delete(self) -> None:
         if self._category_id is None:
             return
-        linked_count = sum(1 for item in self._service.items if item.category_id == self._category_id)
+        linked_count = self._service.linked_item_count([self._category_id])
         if linked_count == 0:
             self._delete()
             return
-        self._confirm_message.text = (
+        message = (
             f"このカテゴリを使用しているアイテムが{linked_count}件あります。"
             "削除すると、それらのアイテムは「未定」に戻ります。削除しますか?"
         )
-        self._confirm_dialog.open()
+        self._confirm_dialog.open(message, self._delete)
 
     def _delete(self) -> None:
         if self._category_id is None:
             return
         self._service.delete_category(self._category_id)
-        self._confirm_dialog.close()
         self.dialog.close()
         self._refresh_all()

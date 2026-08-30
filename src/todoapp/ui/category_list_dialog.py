@@ -18,6 +18,7 @@ class CategoryListDialog:
     def __init__(self, service: TodoService, state: AppState) -> None:
         self._service = service
         self._state = state
+        self._rendered_ids: list[str] = []
 
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[36rem] gap-2"):
@@ -26,7 +27,7 @@ class CategoryListDialog:
                 columns=COLUMNS,
                 rows=[],
                 row_key="id",
-                selection="single",
+                selection="multiple",
                 on_select=self._on_select,
             )
             self.table.on("rowClick", self._on_row_click, args=[[], ["id"]])
@@ -59,13 +60,21 @@ class CategoryListDialog:
                     "color": category.color,
                 }
             )
+        self._rendered_ids = [row["id"] for row in rows]
         self.table.update_rows(rows, clear_selection=False)
 
     def _on_select(self, e: TableSelectionEventArguments) -> None:
+        self._state.select_categories({row["id"] for row in e.selection})
         if e.selection:
             self._state.select_category(e.selection[0]["id"])
 
     def _on_row_click(self, e: GenericEventArguments) -> None:
         category_id = e.args[1]["id"]
         self._state.select_category(category_id)
+        self._state.select_categories({category_id})
         self.table.selected = [{"id": category_id}]
+
+    def select_all(self) -> None:
+        rows = [{"id": category_id} for category_id in self._rendered_ids]
+        self.table.selected = rows
+        self._state.select_categories(set(self._rendered_ids))

@@ -4,7 +4,7 @@ from collections.abc import Callable
 from datetime import date, datetime
 
 from nicegui import ui
-from nicegui.events import SortableEventArguments
+from nicegui.events import GenericEventArguments, SortableEventArguments
 
 from todoapp.domain.models import ScheduleType, TodoItem
 from todoapp.domain.service import TodoService
@@ -27,6 +27,9 @@ class MainView:
         self._new_item_input: ui.input | None = None
         self._elapsed_label: ui.label | None = None
         self._elapsed_item_id: str | None = None
+        self._rendered_item_ids: list[str] = []
+        self._select_anchor_index: int | None = None
+        self._select_all_active = False
 
     def build(self) -> ui.column:
         root = ui.column().classes("w-full gap-2 p-4")
@@ -60,12 +63,48 @@ class MainView:
         if item is not None:
             self._open_category_pick(item.id)
 
-    def _select(self, item_id: str) -> None:
+    def select_all(self) -> None:
+        self._state.select_items(set(self._rendered_item_ids))
+        self._select_all_active = True
+        self.render.refresh()
+
+    def is_select_all_active(self) -> bool:
+        return self._select_all_active
+
+    def clear_select_all(self) -> None:
+        self._state.select_items(set())
+        self._select_all_active = False
+        self.render.refresh()
+
+    def _on_row_click(self, item_id: str, e: GenericEventArguments) -> None:
+        self._select_all_active = False
+        modifiers = e.args[0]
+        ctrl = bool(modifiers["ctrlKey"] or modifiers["metaKey"])
+        shift = bool(modifiers["shiftKey"])
+        index = self._rendered_item_ids.index(item_id) if item_id in self._rendered_item_ids else None
+
+        if shift and self._select_anchor_index is not None and index is not None:
+            lo, hi = sorted((self._select_anchor_index, index))
+            self._state.select_items(set(self._rendered_item_ids[lo : hi + 1]))
+        elif ctrl:
+            selected = set(self._state.selected_item_ids)
+            if item_id in selected:
+                selected.discard(item_id)
+            else:
+                selected.add(item_id)
+            self._state.select_items(selected)
+            self._select_anchor_index = index
+        else:
+            self._state.select_items({item_id})
+            self._select_anchor_index = index
+
         self._state.select(item_id)
         self.render.refresh()
 
     def _toggle(self, item_id: str) -> None:
+        self._select_all_active = False
         self._state.select(item_id)
+        self._state.select_items({item_id})
         self._service.toggle_execution(item_id)
         self._refresh_all()
 
@@ -88,6 +127,7 @@ class MainView:
         with self.list_container:
             today = date.today()
             items = self._service.items_due_today(today)
+            self._rendered_item_ids = [item.id for item in items]
             if not items:
                 ui.label("").classes("text-gray-400 italic h-8")
                 return
@@ -97,13 +137,13 @@ class MainView:
     def _render_row(self, item: TodoItem, today: date) -> None:
         running = self._service.running_record()
         is_running = running is not None and running.item_id == item.id
-        is_selected = self._state.selected_item_id == item.id
+        is_selected = item.id in self._state.selected_item_ids
 
         classes = "w-full items-center gap-3 p-2 rounded cursor-pointer border"
         classes += " border-primary bg-blue-50" if is_selected else " border-transparent"
 
         with ui.row().classes(classes) as row:
-            row.on("click", lambda i=item.id: self._select(i))
+            row.on("click", lambda e, i=item.id: self._on_row_click(i, e), args=["ctrlKey", "metaKey", "shiftKey"])
             row.on("dblclick", lambda i=item.id: self._toggle(i))
             ui.label(item.name).classes("font-medium")
             ui.badge(SCHEDULE_LABELS[item.schedule_type.value]).props("outline")

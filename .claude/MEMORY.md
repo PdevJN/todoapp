@@ -1,6 +1,6 @@
 # 作業状況メモ
 
-最終更新: 2026-08-30(カテゴリ機能を追加)
+最終更新: 2026-08-30(全選択・複数選択・DELキー削除に対応)
 
 ## 現在のブランチ
 
@@ -69,7 +69,19 @@ src/todoapp/
   - `keyboard.py`の`e`キー分岐にカテゴリ一覧の優先順位を追加、`g`(メイン画面限定)・`T`(メイン/編集一覧)を新設
   - ドメイン層テストを追加(`Category`のラウンドトリップ・期限切れ判定、カテゴリCRUD、集計関数)。`uv run pytest` 37件全パス、`uv run mypy src test`通過
   - ユーザーが実機で全機能(Shift+Enter登録、カテゴリ一覧/編集/削除、カテゴリ別集計、編集一覧バッジ、メインパネル非表示)を確認済み
-  - 追加要望: カテゴリ削除時、紐づくアイテムがある場合は「未定」に戻る旨の確認ダイアログを挟むよう`CategoryEditDialog`に確認用の`ui.dialog()`を追加(`_confirm_delete`で紐付き件数を数え、0件なら即削除・1件以上なら確認ダイアログ経由)。ユーザー確認済み。コミットはこれから
+  - 追加要望: カテゴリ削除時、紐づくアイテムがある場合は「未定」に戻る旨の確認ダイアログを挟むよう`CategoryEditDialog`に確認用の`ui.dialog()`を追加(`_confirm_delete`で紐付き件数を数え、0件なら即削除・1件以上なら確認ダイアログ経由)。ユーザー確認済み。コミット済み(`f2a2afc`)
+
+- ユーザー要望により、メインパネル・編集一覧・作業ログ・カテゴリ一覧の4画面すべてで全選択(`Cmd+A`)・複数選択・`DEL`キー削除に対応(計画は同じ`tranquil-petting-squirrel.md`を上書きして保存、EnterPlanMode経由で操作方法を事前確認)。要件確認事項:
+  - メインパネル・作業ログ(自作の行一覧)は`Cmd/Ctrl+click`で個別トグル、`Shift+click`で範囲選択
+  - 編集一覧・カテゴリ一覧(QTable)は`selection="multiple"`に変更し、チェックボックス・ヘッダーの全選択チェックボックスを使う
+  - 既存の単一選択フィールド(`selected_item_id`等、Enter/e/cが参照)はそのまま維持し、新たに複数選択マーク用の`set`フィールド(`selected_item_ids`等)を`AppState`に追加。プレーンクリックはこの集合を`{そのid}`にリセットするため、修飾キーを使わない操作でも`DEL`削除は違和感なく機能する
+  - メインパネルと編集一覧は同じ`TodoItem`集合の選択状態を共有するため、`delete_items`(アイテム)/`delete_records`(記録)/`delete_categories`(カテゴリ、`linked_item_count`で紐付き件数を事前取得)を`TodoService`に追加し、削除ロジックは`main.py`のクロージャに一本化
+  - 共通の`ConfirmDialog`(`ui/confirm_dialog.py`)を新設し、複数選択削除(2件以上)とカテゴリ編集フォームの既存の単一削除確認の両方で再利用するようリファクタリング
+  - ブラウザ既定のCmd/Ctrl+A(ページ全体のテキスト選択)を`ui.add_body_html`の小さなスクリプトで`preventDefault`し、見た目のちらつきを防止
+  - 追加要望: メインパネルの`Cmd+A`全選択状態のときのみ`ESC`で選択解除できるようにした(通常のクリック選択やLIST/ログ/カテゴリ画面のESC挙動は変更せず)。`MainView`に`_select_all_active`フラグを追加し、`keyboard.py`のESC処理で分岐
+  - **不具合修正**: `DEL`キーが効かない不具合を発見。原因はmacOSキーボードの主要な「delete」キー(Backspace位置)がDOM上では`event.key === "Backspace"`として送られ、`"Delete"`(Fn+Delete、フォワードデリート)とは別物であること。`keyboard.py`で`e.key.delete`のみを見ていたため反応していなかった。`e.key.delete or e.key.backspace`に修正
+  - ドメイン層テストを追加(`delete_items`/`delete_records`/`linked_item_count`/`delete_categories`)。`uv run pytest` 41件全パス、`uv run mypy src test`通過
+  - ユーザーが実機で全機能(Cmd/Ctrl+click個別トグル、Shift+click範囲選択、チェックボックス複数選択、Cmd+A全選択、DEL単一/複数削除、確認ダイアログ、ESC全選択解除、カテゴリ複数削除の紐付き復帰)を確認済み。コミットはこれから
 
 ## 未実施・今後の検討事項
 

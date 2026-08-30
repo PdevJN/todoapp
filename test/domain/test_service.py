@@ -306,3 +306,65 @@ def test_kind_today_totals_groups_by_category_kind() -> None:
     totals = service.kind_today_totals(date(2026, 8, 30))
     assert totals["業務"] == 900
     assert totals["未定"] == 60
+
+
+def test_delete_items_removes_multiple_items_and_stops_running_one() -> None:
+    service, _, clock = _service()
+    item_a = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    item_b = service.add_item("B", ScheduleType.DAILY, date(2026, 8, 30))
+    item_c = service.add_item("C", ScheduleType.DAILY, date(2026, 8, 30))
+    service.start(item_a.id)
+    clock.advance(60)
+
+    service.delete_items([item_a.id, item_b.id])
+
+    assert [item.id for item in service.items] == [item_c.id]
+    assert service.running_record() is None
+    assert len(service.records) == 1
+    assert service.records[0].end_time is not None
+
+
+def test_delete_records_removes_multiple_records() -> None:
+    service, _, clock = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30))
+    service.start(item.id)
+    clock.advance(60)
+    service.stop_running()
+    service.start(item.id)
+    clock.advance(30)
+    service.stop_running()
+    record_ids = [r.id for r in service.records]
+
+    service.delete_records(record_ids)
+
+    assert service.records == []
+
+
+def test_linked_item_count_counts_items_across_categories() -> None:
+    service, _, _ = _service()
+    work = service.add_category("仕事")
+    hobby = service.add_category("趣味")
+    item_a = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    item_b = service.add_item("B", ScheduleType.DAILY, date(2026, 8, 30))
+    service.add_item("C", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item_a.id, work.id)
+    service.set_item_category(item_b.id, hobby.id)
+
+    assert service.linked_item_count([work.id, hobby.id]) == 2
+    assert service.linked_item_count([work.id]) == 1
+
+
+def test_delete_categories_removes_multiple_and_resets_linked_items() -> None:
+    service, _, _ = _service()
+    work = service.add_category("仕事")
+    hobby = service.add_category("趣味")
+    item_a = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    item_b = service.add_item("B", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item_a.id, work.id)
+    service.set_item_category(item_b.id, hobby.id)
+
+    service.delete_categories([work.id, hobby.id])
+
+    assert service.categories == []
+    assert service.items[0].category_id is None
+    assert service.items[1].category_id is None

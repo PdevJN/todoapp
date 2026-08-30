@@ -23,6 +23,7 @@ class ListView:
     def __init__(self, service: TodoService, state: AppState) -> None:
         self._service = service
         self._state = state
+        self._rendered_ids: list[str] = []
 
     def build(self) -> ui.column:
         root = ui.column().classes("w-full gap-2 p-4")
@@ -32,7 +33,7 @@ class ListView:
                 columns=COLUMNS,
                 rows=[],
                 row_key="id",
-                selection="single",
+                selection="multiple",
                 on_select=self._on_select,
             )
             # QTableは既定でチェックボックス以外の行クリックでは選択されないため、
@@ -58,13 +59,20 @@ class ListView:
         return root
 
     def _on_select(self, e: TableSelectionEventArguments) -> None:
+        self._state.select_items({row["id"] for row in e.selection})
         if e.selection:
             self._state.select(e.selection[0]["id"])
 
     def _on_row_click(self, e: GenericEventArguments) -> None:
         item_id = e.args[1]["id"]
         self._state.select(item_id)
+        self._state.select_items({item_id})
         self.table.selected = [{"id": item_id}]
+
+    def select_all(self) -> None:
+        rows = [{"id": item_id} for item_id in self._rendered_ids]
+        self.table.selected = rows
+        self._state.select_items(set(self._rendered_ids))
 
     def _tick(self) -> None:
         if self._state.screen is Screen.LIST and self._service.running_record() is not None:
@@ -91,4 +99,5 @@ class ListView:
                     "category_expired": bool(category and is_category_expired(category, today)),
                 }
             )
+        self._rendered_ids = [str(row["id"]) for row in rows]
         self.table.update_rows(rows, clear_selection=False)

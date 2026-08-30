@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import date, datetime
 from typing import Protocol
 
@@ -139,6 +139,14 @@ class TodoService:
         self._data.items = [item for item in self._data.items if item.id != item_id]
         self._save()
 
+    def delete_items(self, item_ids: Iterable[str]) -> None:
+        ids = set(item_ids)
+        running = self.running_record()
+        if running is not None and running.item_id in ids:
+            running.end_time = self._clock()
+        self._data.items = [item for item in self._data.items if item.id not in ids]
+        self._save()
+
     def reorder(self, old_index: int, new_index: int) -> None:
         item = self._data.items.pop(old_index)
         self._data.items.insert(new_index, item)
@@ -181,6 +189,11 @@ class TodoService:
         self._data.records = [r for r in self._data.records if r.id != record_id]
         self._save()
 
+    def delete_records(self, record_ids: Iterable[str]) -> None:
+        ids = set(record_ids)
+        self._data.records = [r for r in self._data.records if r.id not in ids]
+        self._save()
+
     def add_category(self, name: str, kind: str = "", expiry_date: date | None = None) -> Category:
         category = Category(name=name, kind=kind, expiry_date=expiry_date)
         self._data.categories.append(category)
@@ -195,9 +208,17 @@ class TodoService:
         self._save()
 
     def delete_category(self, category_id: str) -> None:
-        self._data.categories = [c for c in self._data.categories if c.id != category_id]
+        self.delete_categories([category_id])
+
+    def linked_item_count(self, category_ids: Iterable[str]) -> int:
+        ids = set(category_ids)
+        return sum(1 for item in self._data.items if item.category_id in ids)
+
+    def delete_categories(self, category_ids: Iterable[str]) -> None:
+        ids = set(category_ids)
+        self._data.categories = [c for c in self._data.categories if c.id not in ids]
         for item in self._data.items:
-            if item.category_id == category_id:
+            if item.category_id in ids:
                 item.category_id = None
         self._save()
 
