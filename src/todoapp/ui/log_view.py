@@ -39,7 +39,7 @@ class LogView:
         self._render.refresh()
 
     def _on_row_click(self, record_id: str, e: GenericEventArguments) -> None:
-        modifiers = e.args[0]
+        modifiers = e.args
         ctrl = bool(modifiers["ctrlKey"] or modifiers["metaKey"])
         shift = bool(modifiers["shiftKey"])
         index = self._rendered_record_ids.index(record_id) if record_id in self._rendered_record_ids else None

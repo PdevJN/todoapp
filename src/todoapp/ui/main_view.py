@@ -78,7 +78,7 @@ class MainView:
 
     def _on_row_click(self, item_id: str, e: GenericEventArguments) -> None:
         self._select_all_active = False
-        modifiers = e.args[0]
+        modifiers = e.args
         ctrl = bool(modifiers["ctrlKey"] or modifiers["metaKey"])
         shift = bool(modifiers["shiftKey"])
         index = self._rendered_item_ids.index(item_id) if item_id in self._rendered_item_ids else None
