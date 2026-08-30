@@ -1,6 +1,6 @@
 # 作業状況メモ
 
-最終更新: 2026-08-30(全選択・複数選択・DELキー削除に対応)
+最終更新: 2026-08-30(カテゴリ一覧に「未定」行を追加)
 
 ## 現在のブランチ
 
@@ -81,7 +81,11 @@ src/todoapp/
   - 追加要望: メインパネルの`Cmd+A`全選択状態のときのみ`ESC`で選択解除できるようにした(通常のクリック選択やLIST/ログ/カテゴリ画面のESC挙動は変更せず)。`MainView`に`_select_all_active`フラグを追加し、`keyboard.py`のESC処理で分岐
   - **不具合修正**: `DEL`キーが効かない不具合を発見。原因はmacOSキーボードの主要な「delete」キー(Backspace位置)がDOM上では`event.key === "Backspace"`として送られ、`"Delete"`(Fn+Delete、フォワードデリート)とは別物であること。`keyboard.py`で`e.key.delete`のみを見ていたため反応していなかった。`e.key.delete or e.key.backspace`に修正
   - ドメイン層テストを追加(`delete_items`/`delete_records`/`linked_item_count`/`delete_categories`)。`uv run pytest` 41件全パス、`uv run mypy src test`通過
-  - ユーザーが実機で全機能(Cmd/Ctrl+click個別トグル、Shift+click範囲選択、チェックボックス複数選択、Cmd+A全選択、DEL単一/複数削除、確認ダイアログ、ESC全選択解除、カテゴリ複数削除の紐付き復帰)を確認済み。コミットはこれから
+  - ユーザーが実機で全機能(Cmd/Ctrl+click個別トグル、Shift+click範囲選択、チェックボックス複数選択、Cmd+A全選択、DEL単一/複数削除、確認ダイアログ、ESC全選択解除、カテゴリ複数削除の紐付き復帰)を確認済み。コミット済み(`9d872cf`)
+
+- ユーザー要望により、カテゴリ一覧(`category_list_dialog.py`)でカテゴリ名にマウスオーバーすると、そのカテゴリに属する本日のアイテム名一覧を`q-tooltip`で表示するよう追加(0件のときは「本日のアイテムはありません」と表示)。`body-cell-name`スロットに`<q-tooltip>`を追加し、`refresh()`で`self._service.items_due_today(date.today())`を`category_id`でフィルタして各行に`today_items`(名前のリスト)を持たせた。新規のTodoServiceメソッドは追加せず、UI層でのフィルタのみで対応。ユーザー確認済み
+
+- ユーザー要望により、カテゴリ一覧の先頭に実体を持たない「未定」の擬似行(`id="__uncategorized__"`)を追加表示(本日の未分類アイテムのホバー表示も同様に対応)。ユーザーから追加で「編集もできないことを期待している」との指摘があり、`_on_select`/`_on_row_click`で`UNCATEGORIZED_ID`を明示的に除外することで選択自体をブロックし、`e`キー編集・`DEL`削除のどちらも一切トリガーされないようにした(`select_all`用の`_rendered_ids`からも除外)。ユーザーが実機で「未定」の表示・編集不可・削除不可を確認済み。コミットはこれから
 
 ## 未実施・今後の検討事項
 
