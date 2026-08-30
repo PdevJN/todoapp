@@ -67,9 +67,15 @@ class KeyboardController:
         if e.key.escape:
             if self._is_dialog_open():
                 return
-            if self._state.screen is Screen.MAIN and self._is_main_select_all_active():
-                self._clear_main_select_all()
-                return
+            if self._state.screen is Screen.MAIN:
+                if self._is_main_select_all_active():
+                    self._clear_main_select_all()
+                    return
+                if self._state.selected_item_id is not None or self._state.selected_item_ids:
+                    self._state.select(None)
+                    self._state.select_items(set())
+                    self._refresh_all()
+                    return
             self._state.toggle_screen()
             self._refresh_all()
             return
