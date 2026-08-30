@@ -6,10 +6,11 @@ from nicegui import ui
 
 from todoapp.domain.models import Category
 from todoapp.domain.service import TodoService
+from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.formatting import format_duration
 
 
-class CategorySummaryDialog:
+class CategorySummaryDialog(DialogMixin):
     def __init__(self, service: TodoService) -> None:
         self._service = service
         self._selected_key: str | None = None
@@ -22,9 +23,6 @@ class CategorySummaryDialog:
             ui.label("種別ごとの集計").classes("text-sm font-bold text-gray-600")
             self.kind_container = ui.column().classes("w-full gap-1")
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
-
-    def is_open(self) -> bool:
-        return bool(self.dialog.value)
 
     def open(self) -> None:
         self.refresh()

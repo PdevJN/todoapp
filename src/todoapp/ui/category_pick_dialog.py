@@ -5,9 +5,10 @@ from collections.abc import Callable
 from nicegui import ui
 
 from todoapp.domain.service import TodoService
+from todoapp.ui.dialog_base import DialogMixin
 
 
-class CategoryPickDialog:
+class CategoryPickDialog(DialogMixin):
     def __init__(self, service: TodoService, refresh_all: Callable[[], None]) -> None:
         self._service = service
         self._refresh_all = refresh_all
@@ -21,9 +22,6 @@ class CategoryPickDialog:
                 self._new_category_input = ui.input(placeholder="新しいカテゴリ名").classes("flex-grow")
                 ui.button("追加", on_click=self._create_and_assign)
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
-
-    def is_open(self) -> bool:
-        return bool(self.dialog.value)
 
     def open_for(self, item_id: str) -> None:
         self._item_id = item_id

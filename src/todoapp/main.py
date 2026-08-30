@@ -18,6 +18,7 @@ from todoapp.ui.category_list_dialog import CategoryListDialog
 from todoapp.ui.category_pick_dialog import CategoryPickDialog
 from todoapp.ui.category_summary_dialog import CategorySummaryDialog
 from todoapp.ui.confirm_dialog import ConfirmDialog
+from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.edit_dialog import EditDialog
 from todoapp.ui.help_dialog import HelpDialog
 from todoapp.ui.keyboard import KeyboardController
@@ -163,21 +164,23 @@ def build_app() -> None:
     main_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.MAIN)
     list_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.LIST)
 
+    all_dialogs: list[DialogMixin] = [
+        edit_dialog,
+        log_view,
+        record_edit_dialog,
+        category_list_dialog,
+        category_edit_dialog,
+        category_summary_dialog,
+        category_pick_dialog,
+        category_kind_dialog,
+        confirm_dialog,
+        help_dialog,
+    ]
+
     keyboard = KeyboardController(
         service,
         state,
-        is_dialog_open=lambda: (
-            edit_dialog.is_open()
-            or log_view.is_open()
-            or record_edit_dialog.is_open()
-            or category_list_dialog.is_open()
-            or category_edit_dialog.is_open()
-            or category_summary_dialog.is_open()
-            or category_pick_dialog.is_open()
-            or category_kind_dialog.is_open()
-            or confirm_dialog.is_open()
-            or help_dialog.is_open()
-        ),
+        is_dialog_open=lambda: any(dialog.is_open() for dialog in all_dialogs),
         is_log_open=log_view.is_open,
         is_category_list_open=category_list_dialog.is_open,
         open_edit_dialog=edit_dialog.open_for,

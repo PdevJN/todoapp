@@ -8,9 +8,10 @@ from nicegui import ui
 from todoapp.domain.models import CATEGORY_COLORS
 from todoapp.domain.service import TodoService
 from todoapp.ui.confirm_dialog import ConfirmDialog
+from todoapp.ui.dialog_base import DialogMixin
 
 
-class CategoryEditDialog:
+class CategoryEditDialog(DialogMixin):
     def __init__(
         self,
         service: TodoService,
@@ -43,9 +44,6 @@ class CategoryEditDialog:
                 with ui.row().classes("gap-2"):
                     ui.button("キャンセル", on_click=self.dialog.close).props("flat")
                     ui.button("保存", on_click=self._save)
-
-    def is_open(self) -> bool:
-        return bool(self.dialog.value)
 
     def open_for(self, category_id: str) -> None:
         category = next((c for c in self._service.categories if c.id == category_id), None)

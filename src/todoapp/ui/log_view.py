@@ -8,10 +8,11 @@ from nicegui.events import GenericEventArguments
 from todoapp.domain.models import ExecutionRecord
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
+from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.formatting import format_duration
 
 
-class LogView:
+class LogView(DialogMixin):
     def __init__(self, service: TodoService, state: AppState) -> None:
         self._service = service
         self._state = state
@@ -23,9 +24,6 @@ class LogView:
             ui.label("本日の作業ログ").classes("text-lg font-bold")
             self.log_container = ui.column().classes("w-full gap-1")
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
-
-    def is_open(self) -> bool:
-        return bool(self.dialog.value)
 
     def open(self) -> None:
         self._render()

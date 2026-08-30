@@ -6,9 +6,10 @@ from datetime import datetime, time
 from nicegui import ui
 
 from todoapp.domain.service import TodoService
+from todoapp.ui.dialog_base import DialogMixin
 
 
-class RecordEditDialog:
+class RecordEditDialog(DialogMixin):
     def __init__(self, service: TodoService, refresh_all: Callable[[], None]) -> None:
         self._service = service
         self._refresh_all = refresh_all
@@ -27,9 +28,6 @@ class RecordEditDialog:
                 with ui.row().classes("gap-2"):
                     ui.button("キャンセル", on_click=self.dialog.close).props("flat")
                     ui.button("保存", on_click=self._save)
-
-    def is_open(self) -> bool:
-        return bool(self.dialog.value)
 
     def open_for(self, record_id: str) -> None:
         record = next((r for r in self._service.records if r.id == record_id), None)

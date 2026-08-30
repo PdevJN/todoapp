@@ -4,8 +4,10 @@ from collections.abc import Callable
 
 from nicegui import ui
 
+from todoapp.ui.dialog_base import DialogMixin
 
-class ConfirmDialog:
+
+class ConfirmDialog(DialogMixin):
     def __init__(self) -> None:
         self._on_confirm: Callable[[], None] | None = None
 
@@ -15,9 +17,6 @@ class ConfirmDialog:
             with ui.row().classes("w-full justify-end gap-2"):
                 ui.button("キャンセル", on_click=self.dialog.close).props("flat")
                 ui.button("削除する", on_click=self._confirm).props("color=negative")
-
-    def is_open(self) -> bool:
-        return bool(self.dialog.value)
 
     def open(self, message: str, on_confirm: Callable[[], None]) -> None:
         self._message.text = message

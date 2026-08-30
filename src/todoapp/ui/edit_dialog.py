@@ -7,10 +7,11 @@ from nicegui import ui
 
 from todoapp.domain.models import ScheduleType
 from todoapp.domain.service import TodoService
+from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.formatting import SCHEDULE_LABELS
 
 
-class EditDialog:
+class EditDialog(DialogMixin):
     def __init__(self, service: TodoService, refresh_all: Callable[[], None]) -> None:
         self._service = service
         self._refresh_all = refresh_all
@@ -34,9 +35,6 @@ class EditDialog:
                 with ui.row().classes("gap-2"):
                     ui.button("キャンセル", on_click=self.dialog.close).props("flat")
                     ui.button("保存", on_click=self._save)
-
-    def is_open(self) -> bool:
-        return bool(self.dialog.value)
 
     def open_for(self, item_id: str) -> None:
         item = next((i for i in self._service.items if i.id == item_id), None)

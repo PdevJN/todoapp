@@ -9,6 +9,8 @@ from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 from todoapp.domain.models import Category
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
+from todoapp.ui.dialog_base import DialogMixin
+from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 
 UNCATEGORIZED_ID = "__uncategorized__"
 
@@ -20,7 +22,7 @@ COLUMNS = [
 ]
 
 
-class CategoryListDialog:
+class CategoryListDialog(DialogMixin):
     def __init__(
         self,
         service: TodoService,
@@ -70,14 +72,13 @@ class CategoryListDialog:
             self._new_category_input = ui.input(placeholder="新しいカテゴリ名を入力してEnter(Shift+Enterで種別入力)").classes(
                 "w-full"
             )
-            # IME変換確定のEnterでも発火するため、変換中(isComposing)は無視する
-            ime_guard = "(...args) => { if (!args[0].isComposing && args[0].keyCode !== 229) emit(...args); }"
-            self._new_category_input.on("keydown.enter.exact", self._add_category, js_handler=ime_guard)
-            self._new_category_input.on("keydown.enter.shift", self._add_category_and_pick_kind, js_handler=ime_guard)
+            self._new_category_input.on(
+                "keydown.enter.exact", self._add_category, js_handler=IME_SAFE_ENTER_HANDLER
+            )
+            self._new_category_input.on(
+                "keydown.enter.shift", self._add_category_and_pick_kind, js_handler=IME_SAFE_ENTER_HANDLER
+            )
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
-
-    def is_open(self) -> bool:
-        return bool(self.dialog.value)
 
     def open(self) -> None:
         self.refresh()

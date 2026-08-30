@@ -13,6 +13,7 @@ from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
 from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
+from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 
 _THEME_ACTIVE_COLOR = "primary"
 _THEME_INACTIVE_COLOR = "grey-7"
@@ -85,10 +86,10 @@ class MainView:
             self._new_item_input = ui.input(placeholder="新しいアイテムを入力してEnter(Shift+Enterでカテゴリ選択)").classes(
                 "w-full"
             )
-            # IME変換確定のEnterでも発火するため、変換中(isComposing)は無視する
-            ime_guard = "(...args) => { if (!args[0].isComposing && args[0].keyCode !== 229) emit(...args); }"
-            self._new_item_input.on("keydown.enter.exact", self._add_item, js_handler=ime_guard)
-            self._new_item_input.on("keydown.enter.shift", self._add_item_and_pick_category, js_handler=ime_guard)
+            self._new_item_input.on("keydown.enter.exact", self._add_item, js_handler=IME_SAFE_ENTER_HANDLER)
+            self._new_item_input.on(
+                "keydown.enter.shift", self._add_item_and_pick_category, js_handler=IME_SAFE_ENTER_HANDLER
+            )
         ui.timer(1.0, self._tick)
         return root
 
