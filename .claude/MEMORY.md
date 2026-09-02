@@ -1,10 +1,10 @@
 # 作業状況メモ
 
-最終更新: 2026-08-30(カテゴリにPRJコードを追加、アイテム編集フォームのカテゴリ選択バッジ表示の不具合修正)
+最終更新: 2026-09-02(develop側のPRJコード機能・編集一覧フィルタと、feature/todo-app-mvp側の↑/↓・j/kキー選択切替+ショートカットキーのシステム警告音修正を`develop`へマージ)
 
 ## 現在のブランチ
 
-`develop`(`feature/todo-app-mvp`は`9ead194`で`develop`へマージ済み。以前の本メモの記述はマージ前の状態のまま更新が追いついていなかったため、今回のセッション冒頭で気づいて整理した)
+`develop`(`feature/todo-app-mvp`は`9ead194`で一度`develop`へマージ済みだったが、その後両ブランチが個別に進んだため、今回`feature/todo-app-mvp`の↑/↓・j/kキー選択切替とシステム警告音修正を`develop`へ再マージした)
 
 ## これまでの作業
 
@@ -162,9 +162,31 @@ src/todoapp/
 
 - 上記2件をユーザー確認後、意味のある単位で2つに分けてコミット済み: カテゴリ選択バッジ修正(`9f15d51`)、編集一覧フィルタ追加(`1d86044`)
 
+## 今回(2026-09-02、feature/todo-app-mvpブランチでの作業とdevelopへの再マージ)
+
+- (`feature/todo-app-mvp`ブランチ側で実施。上記の`develop`側の作業とは別セッションで並行して進んでいたため、両ブランチが分岐していた)
+- ユーザー要望により、メインパネル・編集一覧・作業ログ・カテゴリ一覧の4画面すべてで`↑`/`↓`キーによる単一選択の切り替えに対応
+  - `MainView`/`ListView`/`LogView`/`CategoryListDialog`それぞれに`move_selection(delta: int)`を追加。表示順リスト(`_rendered_item_ids`等)の中で現在の単一選択の位置を求め、±1した位置(先頭・末尾でクランプ、範囲外に出ない)の1件のみを新たな単一選択にする。未選択の状態から`↓`を押すと先頭、`↑`を押すと末尾を選択する
+  - `MainView.move_selection`は既存の`_on_row_click`と同様、選択中の`_select_all_active`解除・`_select_anchor_index`更新・`_update_selection_classes`によるCSSクラス差分更新(全体再描画を避けてダブルクリック等との競合を防ぐ既存パターン)を踏襲
+  - `KeyboardController`に`e.key.arrow_up`/`arrow_down`の分岐を新設。ESCキーと同じ優先順位(カテゴリ一覧が開いていれば最優先→作業ログが開いていれば次→他のダイアログが開いていれば何もしない→編集一覧/メイン画面)で呼び分ける
+  - `NiceGUI`の`ui.keyboard`は入力欄・select・button・textareaにフォーカスがある間グローバルキーを無視する既存仕様により、最下部の新規登録入力欄にフォーカス中は矢印キーがこのハンドラに届かず、テキストカーソル移動と衝突しない
+  - `help_dialog.py`・`README.md`・`CLAUDE.md`(todoapp直下、`複数選択・削除`節)にも操作を追記。`uv run pytest`(79件)・`uv run mypy src test`とも問題なし。ドメイン層のロジックは変更していないため新規のドメインテストは追加していない
+  - ユーザー要望により、`j`(下)/`k`(上)キーでも同じ選択切り替えができるよう追加(`e.key == "j"`/`"k"`を矢印キー分岐に合流)。`help_dialog.py`・`README.md`・`CLAUDE.md`も追記。`uv run pytest`(79件)・`uv run mypy src test`とも問題なし
+  - ユーザーから「`j`/`k`キーを押すと音が鳴る」との報告受領
+    - 原因: NiceGUIの`ui.keyboard`(`keyboard.js`)はキーイベントをサーバーに転送するのみで`preventDefault()`を呼ばない。pywebviewのネイティブウィンドウ(WKWebView)ではフォーカス先が無い状態で`j`/`k`等の文字キーを押すと、ブラウザ側の既定動作(テキスト挿入)が処理先を見つけられず、AppKit側でシステム警告音(NSBeep)が鳴ると見られる。矢印キーはカーソル移動系のコマンドとして扱われるため鳴らない
+    - 修正: `main.py`の既存のCmd/Ctrl+A抑止スクリプト(`ui.add_body_html`)に、`j`/`k`キー用の`preventDefault()`を追加。`ui.keyboard`がグローバルキーを無視する対象(`input`/`select`/`button`/`textarea`)と同じ判定で、フォーカスが無い間だけ抑止するようにした(テキスト入力欄内での`j`/`k`の通常入力は妨げない)
+    - `uv run pytest`(79件)・`uv run mypy src test`とも問題なし
+  - ユーザーから続けて「メインパネルの上下キー入力でも音が鳴る」との報告受領。`j`/`k`と同じ原因(WKWebViewでフォーカス先が無い未処理キーがOS側の警告音を鳴らす)と判断し、`main.py`の抑止対象キー(`beepKeys`)に`ArrowUp`/`ArrowDown`を追加
+  - ユーザーから「全ての画面でショートカットされているキー入力(`ESC`/`e`/`T`/`DEL`等)で音が鳴らないようにしてほしい」との要望を受け、その場しのぎの追加ではなく`main.py`のpreventDefault対象を`KeyboardController`(`keyboard.py`)がグローバルに処理する全キー(`Escape`/`Enter`/`Backspace`/`Delete`/`ArrowUp`/`ArrowDown`/`e`/`c`/`l`/`g`/`T`/`j`/`k`)に揃えて一元管理するよう整理。あわせて`Cmd/Ctrl+A`以外はmeta/ctrl/altキー併用時を除外する条件を追加(他の修飾キー併用のブラウザ標準ショートカットを誤って奪わないため)
+  - ユーザーの実機確認・コミット(`35e8063`)まで完了
+
+- 未追跡だった`.DS_Store`を`.gitignore`に追加(`82a3d21`)
+
+- `develop`側で先行していたPRJコード機能・編集一覧フィルタ(上記「四度目の再開分」まで)と、`feature/todo-app-mvp`側の↑/↓・j/kキー選択切替+ショートカットキーのシステム警告音修正が別々に進んでいたため、`develop`へ`feature/todo-app-mvp`を再マージ。競合したのは本ファイル(`.claude/MEMORY.md`、両ブランチのセッション記録が同じ節に追記されていたため)のみで、コード側(`category_list_dialog.py`・`list_view.py`)はPRJコード列/フィルタ機能行と`move_selection`追加が別箇所のため自動マージされた
+
 ## 未実施・今後の検討事項
 
-- 特になし(直近の変更はコミット予定)
+- `main`へのマージはまだ行っていない
 
 ## 運用ルール(このセッションで確定した方針)
 

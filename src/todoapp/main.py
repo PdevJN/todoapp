@@ -57,10 +57,24 @@ def build_app() -> None:
     )
 
     # ネイティブブラウザのCmd/Ctrl+A(ページ全体のテキスト選択)を抑止し、
-    # 独自の全選択キー操作と見た目が競合しないようにする
+    # 独自の全選択キー操作と見た目が競合しないようにする。
+    # また、pywebviewのネイティブウィンドウ(WKWebView)では、フォーカス先が無い状態で
+    # ブラウザ側の既定の編集・移動コマンドに対応するキーを押すと、処理先が見つからず
+    # OS側でシステム警告音が鳴ることがある。KeyboardController(keyboard.py)がグローバルに
+    # 処理している全ショートカットキーを一元管理し、ui.keyboard(NiceGUI)がグローバルキーを
+    # 無視する対象(input/select/button/textarea)と同じ判定で、フォーカスが無い間は
+    # これらのキーをpreventDefault()して警告音を防ぐ
     ui.add_body_html(
         "<script>document.addEventListener('keydown', (e) => {"
-        "if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') e.preventDefault();"
+        "if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); return; }"
+        "const ignoreTags = ['input', 'select', 'button', 'textarea'];"
+        "const focusedTag = document.activeElement && document.activeElement.tagName.toLowerCase();"
+        "if (ignoreTags.includes(focusedTag) || e.metaKey || e.ctrlKey || e.altKey) return;"
+        "const shortcutKeys = ["
+        "'Escape', 'Enter', 'Backspace', 'Delete', 'ArrowUp', 'ArrowDown',"
+        "'e', 'c', 'l', 'g', 'T', 'j', 'k',"
+        "];"
+        "if (shortcutKeys.includes(e.key)) e.preventDefault();"
         "});</script>"
     )
 
@@ -203,6 +217,10 @@ def build_app() -> None:
         has_category_selection=category_list_dialog.has_selection,
         clear_category_selection=category_list_dialog.clear_selection,
         close_category_list=category_list_dialog.close,
+        move_main_selection=main_view.move_selection,
+        move_list_selection=list_view.move_selection,
+        move_log_selection=log_view.move_selection,
+        move_category_selection=category_list_dialog.move_selection,
         refresh_all=refresh_all,
     )
     keyboard.build()

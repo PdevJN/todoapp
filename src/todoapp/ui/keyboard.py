@@ -38,6 +38,10 @@ class KeyboardController:
         has_category_selection: Callable[[], bool],
         clear_category_selection: Callable[[], None],
         close_category_list: Callable[[], None],
+        move_main_selection: Callable[[int], None],
+        move_list_selection: Callable[[int], None],
+        move_log_selection: Callable[[int], None],
+        move_category_selection: Callable[[int], None],
         refresh_all: Callable[[], None],
     ) -> None:
         self._service = service
@@ -65,6 +69,10 @@ class KeyboardController:
         self._has_category_selection = has_category_selection
         self._clear_category_selection = clear_category_selection
         self._close_category_list = close_category_list
+        self._move_main_selection = move_main_selection
+        self._move_list_selection = move_list_selection
+        self._move_log_selection = move_log_selection
+        self._move_category_selection = move_category_selection
         self._refresh_all = refresh_all
 
     def build(self) -> None:
@@ -100,6 +108,20 @@ class KeyboardController:
                     return
             self._state.toggle_screen()
             self._refresh_all()
+            return
+
+        if e.key.arrow_up or e.key.arrow_down or e.key == "j" or e.key == "k":
+            delta = 1 if (e.key.arrow_down or e.key == "j") else -1
+            if self._is_category_list_open():
+                self._move_category_selection(delta)
+            elif self._is_log_open():
+                self._move_log_selection(delta)
+            elif self._is_dialog_open():
+                return
+            elif self._state.screen is Screen.LIST:
+                self._move_list_selection(delta)
+            else:
+                self._move_main_selection(delta)
             return
 
         item_id = self._state.selected_item_id
