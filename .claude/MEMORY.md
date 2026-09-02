@@ -1,6 +1,6 @@
 # 作業状況メモ
 
-最終更新: 2026-08-30(カテゴリ一覧にカテゴリ登録機能を追加)
+最終更新: 2026-09-02(ダークモード切り替えFAB・ヘルプ表示・ダイアログ共通化リファクタを反映)
 
 ## 現在のブランチ
 
@@ -131,6 +131,29 @@ src/todoapp/
   - `main.py`に`category_kind_dialog`を配線し、`KeyboardController`の`is_dialog_open`判定にも追加(開いている間は他のグローバルキー操作を抑制)
   - ドメイン層(`add_category`/`edit_category`)は既存のものをそのまま利用したため、新規のドメインテストは追加していない。`uv run pytest`(41件)・`uv run mypy src test`とも問題なし
   - ユーザーが実機で「Enter即登録」「Shift+Enterでの種別入力フォーム表示・保存反映」「IME変換中のEnter無反応」を確認済み
+
+## 今回(2026-09-02 再開分)の作業
+
+- 前回セッション終了時点の続きとして、MEMORY.mdに未反映だった直近4コミットの内容を整理・追記(作業ツリーはクリーン、`uv run pytest`79件・`uv run mypy src test`とも問題ない状態から再開)
+  1. `feat`(`ee28e14`): カテゴリ別集計ダイアログ(`category_summary_dialog.py`)で、種別ごとの集計時間を右揃え表示に変更
+  2. `feat`(`34103fe`): メインパネル右上にテーマ(自動/ライト/ダーク)切り替えFAB、右下にキー操作ヘルプボタンを新設。選択中テーマはFABのボタン色で判別でき、設定は新設の`ConfigRepository`経由で`~/.todoapp/config.json`に保存・次回起動時に復元。ダークモード時に選択ハイライト等が視認できなくなる配色も補正
+  3. `docs`(`7a3f0ee`): カテゴリ機能・複数選択削除・テーマ切替・ヘルプ・実行中フローティング表示など、実装済みだがCLAUDE.md/README.md/docsに未反映だった仕様を追記。あわせて実行中フローティング表示の文字サイズを1段階拡大(base→lg)
+  4. `refactor`(`8b659fa`): 10個のダイアログ系クラスに重複していた`is_open()`実装を`DialogMixin`(`ui/dialog_base.py`)に集約し、`main_view.py`と`category_list_dialog.py`に重複していたIME変換確定対策のJSハンドラを`ui/js_handlers.py`に切り出し。`main.py`の`is_dialog_open`判定もOR連結のlambdaからリスト+`any()`に整理。動作は変更なし
+
+- ユーザー要望により、メインパネル・編集一覧・作業ログ・カテゴリ一覧の4画面すべてで`↑`/`↓`キーによる単一選択の切り替えに対応(コミットはまだ)
+  - `MainView`/`ListView`/`LogView`/`CategoryListDialog`それぞれに`move_selection(delta: int)`を追加。表示順リスト(`_rendered_item_ids`等)の中で現在の単一選択の位置を求め、±1した位置(先頭・末尾でクランプ、範囲外に出ない)の1件のみを新たな単一選択にする。未選択の状態から`↓`を押すと先頭、`↑`を押すと末尾を選択する
+  - `MainView.move_selection`は既存の`_on_row_click`と同様、選択中の`_select_all_active`解除・`_select_anchor_index`更新・`_update_selection_classes`によるCSSクラス差分更新(全体再描画を避けてダブルクリック等との競合を防ぐ既存パターン)を踏襲
+  - `KeyboardController`に`e.key.arrow_up`/`arrow_down`の分岐を新設。ESCキーと同じ優先順位(カテゴリ一覧が開いていれば最優先→作業ログが開いていれば次→他のダイアログが開いていれば何もしない→編集一覧/メイン画面)で呼び分ける
+  - `NiceGUI`の`ui.keyboard`は入力欄・select・button・textareaにフォーカスがある間グローバルキーを無視する既存仕様により、最下部の新規登録入力欄にフォーカス中は矢印キーがこのハンドラに届かず、テキストカーソル移動と衝突しない
+  - `help_dialog.py`・`README.md`・`CLAUDE.md`(todoapp直下、`複数選択・削除`節)にも操作を追記。`uv run pytest`(79件)・`uv run mypy src test`とも問題なし。ドメイン層のロジックは変更していないため新規のドメインテストは追加していない
+  - ユーザー要望により、`j`(下)/`k`(上)キーでも同じ選択切り替えができるよう追加(`e.key == "j"`/`"k"`を矢印キー分岐に合流)。`help_dialog.py`・`README.md`・`CLAUDE.md`も追記。`uv run pytest`(79件)・`uv run mypy src test`とも問題なし
+  - ユーザーから「`j`/`k`キーを押すと音が鳴る」との報告受領
+    - 原因: NiceGUIの`ui.keyboard`(`keyboard.js`)はキーイベントをサーバーに転送するのみで`preventDefault()`を呼ばない。pywebviewのネイティブウィンドウ(WKWebView)ではフォーカス先が無い状態で`j`/`k`等の文字キーを押すと、ブラウザ側の既定動作(テキスト挿入)が処理先を見つけられず、AppKit側でシステム警告音(NSBeep)が鳴ると見られる。矢印キーはカーソル移動系のコマンドとして扱われるため鳴らない
+    - 修正: `main.py`の既存のCmd/Ctrl+A抑止スクリプト(`ui.add_body_html`)に、`j`/`k`キー用の`preventDefault()`を追加。`ui.keyboard`がグローバルキーを無視する対象(`input`/`select`/`button`/`textarea`)と同じ判定で、フォーカスが無い間だけ抑止するようにした(テキスト入力欄内での`j`/`k`の通常入力は妨げない)
+    - `uv run pytest`(79件)・`uv run mypy src test`とも問題なし
+  - ユーザーから続けて「メインパネルの上下キー入力でも音が鳴る」との報告受領。`j`/`k`と同じ原因(WKWebViewでフォーカス先が無い未処理キーがOS側の警告音を鳴らす)と判断し、`main.py`の抑止対象キー(`beepKeys`)に`ArrowUp`/`ArrowDown`を追加
+  - ユーザーから「全ての画面でショートカットされているキー入力(`ESC`/`e`/`T`/`DEL`等)で音が鳴らないようにしてほしい」との要望を受け、その場しのぎの追加ではなく`main.py`のpreventDefault対象を`KeyboardController`(`keyboard.py`)がグローバルに処理する全キー(`Escape`/`Enter`/`Backspace`/`Delete`/`ArrowUp`/`ArrowDown`/`e`/`c`/`l`/`g`/`T`/`j`/`k`)に揃えて一元管理するよう整理。あわせて`Cmd/Ctrl+A`以外はmeta/ctrl/altキー併用時を除外する条件を追加(他の修飾キー併用のブラウザ標準ショートカットを誤って奪わないため)
+  - ユーザーの実機確認はこれから
 
 ## 未実施・今後の検討事項
 

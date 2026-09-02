@@ -60,6 +60,21 @@ class LogView(DialogMixin):
         self._state.select_record(record_id)
         self._render.refresh()
 
+    def move_selection(self, delta: int) -> None:
+        if not self._rendered_record_ids:
+            return
+        current = self._state.selected_record_id
+        if current in self._rendered_record_ids:
+            index = self._rendered_record_ids.index(current) + delta
+            index = max(0, min(len(self._rendered_record_ids) - 1, index))
+        else:
+            index = 0 if delta > 0 else len(self._rendered_record_ids) - 1
+        new_id = self._rendered_record_ids[index]
+        self._select_anchor_index = index
+        self._state.select_records({new_id})
+        self._state.select_record(new_id)
+        self._render.refresh()
+
     @ui.refreshable_method
     def _render(self) -> None:
         self.log_container.clear()

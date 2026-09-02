@@ -167,6 +167,23 @@ class MainView:
         # 行のDOM要素をダブルクリック中も維持する
         self._update_selection_classes(previous_selection)
 
+    def move_selection(self, delta: int) -> None:
+        if not self._rendered_item_ids:
+            return
+        self._select_all_active = False
+        current = self._state.selected_item_id
+        if current in self._rendered_item_ids:
+            index = self._rendered_item_ids.index(current) + delta
+            index = max(0, min(len(self._rendered_item_ids) - 1, index))
+        else:
+            index = 0 if delta > 0 else len(self._rendered_item_ids) - 1
+        new_id = self._rendered_item_ids[index]
+        previous_selection = set(self._state.selected_item_ids)
+        self._state.select(new_id)
+        self._state.select_items({new_id})
+        self._select_anchor_index = index
+        self._update_selection_classes(previous_selection)
+
     def _update_selection_classes(self, previous_selection: set[str]) -> None:
         changed_ids = previous_selection ^ self._state.selected_item_ids
         for changed_id in changed_ids:

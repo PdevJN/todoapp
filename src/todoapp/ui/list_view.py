@@ -74,6 +74,20 @@ class ListView:
         self.table.selected = rows
         self._state.select_items(set(self._rendered_ids))
 
+    def move_selection(self, delta: int) -> None:
+        if not self._rendered_ids:
+            return
+        current = self._state.selected_item_id
+        if current in self._rendered_ids:
+            index = self._rendered_ids.index(current) + delta
+            index = max(0, min(len(self._rendered_ids) - 1, index))
+        else:
+            index = 0 if delta > 0 else len(self._rendered_ids) - 1
+        new_id = self._rendered_ids[index]
+        self._state.select(new_id)
+        self._state.select_items({new_id})
+        self.table.selected = [{"id": new_id}]
+
     def has_selection(self) -> bool:
         return bool(self._state.selected_item_id or self._state.selected_item_ids)
 
