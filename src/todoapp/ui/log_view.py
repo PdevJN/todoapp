@@ -15,6 +15,9 @@ _MODE_ORDER = "order"
 _MODE_CATEGORY = "category"
 _MODE_LABELS = {_MODE_ORDER: "実行順", _MODE_CATEGORY: "カテゴリ別"}
 
+# (カテゴリ(Noneは未定), 本日の合計秒数, [(タスク名, 本日の実行秒数)])
+_CategoryRow = tuple[Category | None, float, list[tuple[str, float]]]
+
 
 class LogView(DialogMixin):
     def __init__(self, service: TodoService, state: AppState) -> None:
@@ -23,6 +26,8 @@ class LogView(DialogMixin):
         self._rendered_record_ids: list[str] = []
         self._select_anchor_index: int | None = None
         self._mode = _MODE_ORDER
+        self._category_signature: list[tuple[str | None, list[str]]] = []
+        self._category_time_labels: list[tuple[ui.label, list[ui.label]]] = []
 
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[32rem] gap-2"):
@@ -45,9 +50,25 @@ class LogView(DialogMixin):
         self._render.refresh()
 
     def _tick(self) -> None:
-        # カテゴリ別の行は操作を受けないため、実行中は毎秒再描画して合計時間を進める
-        if self.is_open() and self._mode == _MODE_CATEGORY and self._service.running_record() is not None:
+        # 行を作り直すと表示中のツールチップが消えるため、構成が同じなら時間の文字だけ更新する
+        if not self.is_open() or self._mode != _MODE_CATEGORY or self._service.running_record() is None:
+            return
+        rows = self._category_rows()
+        if _signature(rows) != self._category_signature:
             self._render.refresh()
+            return
+        for (total_label, item_labels), (_, seconds, items) in zip(self._category_time_labels, rows):
+            total_label.set_text(format_duration(seconds))
+            for item_label, (_, item_seconds) in zip(item_labels, items):
+                item_label.set_text(format_duration(item_seconds))
+
+    def _category_rows(self) -> list[_CategoryRow]:
+        today = date.today()
+        items_by_category = self._service.category_today_item_totals(today)
+        return [
+            (category, seconds, items_by_category.get(category.id if category else None, []))
+            for category, seconds in self._service.category_today_all_totals(today)
+        ]
 
     def _on_mode_change(self, e: ValueChangeEventArguments[str]) -> None:
         # カテゴリ別表示では記録を選択できないため、切り替え時に記録の選択を解除する
@@ -108,8 +129,9 @@ class LogView(DialogMixin):
         with self.log_container:
             if self._mode == _MODE_CATEGORY:
                 self._rendered_record_ids = []
-                for category, seconds in self._service.category_today_all_totals(date.today()):
-                    self._render_category_row(category, seconds)
+                rows = self._category_rows()
+                self._category_signature = _signature(rows)
+                self._category_time_labels = [self._render_category_row(*row) for row in rows]
                 return
             records = self._service.today_records(date.today())
             self._rendered_record_ids = [record.id for record in records]
@@ -136,7 +158,9 @@ class LogView(DialogMixin):
             ui.label(record.item_name).classes("font-medium")
             ui.label(f"{start} - {end} ({elapsed})").classes("text-gray-500 font-mono")
 
-    def _render_category_row(self, category: Category | None, seconds: float) -> None:
+    def _render_category_row(
+        self, category: Category | None, seconds: float, items: list[tuple[str, float]]
+    ) -> tuple[ui.label, list[ui.label]]:
         classes = "w-full justify-between items-center border-b py-1 px-1 rounded"
         with ui.row().classes(classes + (" bg-gray-100" if category is None else "")):
             with ui.row().classes("items-center gap-1"):
@@ -146,4 +170,17 @@ class LogView(DialogMixin):
                     ui.label(category.name).classes("font-medium")
                     if category.prj_code:
                         ui.badge(category.prj_code).props("outline")
-            ui.label(format_duration(seconds)).classes("text-gray-500 font-mono")
+            total_label = ui.label(format_duration(seconds)).classes("text-gray-500 font-mono")
+            item_labels: list[ui.label] = []
+            with ui.tooltip().classes("text-sm"):
+                if not items:
+                    ui.label("本日のタスクはありません")
+                for name, item_seconds in items:
+                    with ui.row().classes("w-full justify-between gap-4 no-wrap"):
+                        ui.label(f"・{name}")
+                        item_labels.append(ui.label(format_duration(item_seconds)).classes("font-mono"))
+        return total_label, item_labels
+
+
+def _signature(rows: list[_CategoryRow]) -> list[tuple[str | None, list[str]]]:
+    return [(category.id if category else None, [name for name, _ in items]) for category, _, items in rows]

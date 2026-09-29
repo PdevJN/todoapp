@@ -266,6 +266,30 @@ class TodoService:
         result.append((None, uncategorized))
         return result
 
+    def category_today_item_totals(self, today: date) -> dict[str | None, list[tuple[str, float]]]:
+        # 本日の実行対象アイテム(一覧順)の後ろに、対象外だが本日実行したアイテムを初回実行順に並べる
+        now = self._clock()
+        known_ids = {category.id for category in self._data.categories}
+        items_by_id = {item.id: item for item in self._data.items}
+        seconds_by_item: dict[str, float] = {}
+        names: dict[str, str] = {}
+        for record in self.today_records(today):
+            elapsed = record.elapsed_seconds(now)
+            seconds_by_item[record.item_id] = seconds_by_item.get(record.item_id, 0.0) + elapsed
+            names.setdefault(record.item_id, record.item_name)
+
+        order = [item.id for item in self.items_due_today(today)]
+        order += [item_id for item_id in seconds_by_item if item_id not in order]
+
+        result: dict[str | None, list[tuple[str, float]]] = {}
+        for item_id in order:
+            item = items_by_id.get(item_id)
+            category_id = item.category_id if item is not None else None
+            key = category_id if category_id in known_ids else None
+            name = item.name if item is not None else names[item_id]
+            result.setdefault(key, []).append((name, seconds_by_item.get(item_id, 0.0)))
+        return result
+
     def kind_today_totals(self, today: date) -> dict[str, float]:
         categories_by_id = {category.id: category for category in self._data.categories}
         totals: dict[str, float] = {}
