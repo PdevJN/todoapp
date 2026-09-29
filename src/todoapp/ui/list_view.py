@@ -6,7 +6,7 @@ from datetime import date
 from nicegui import ui
 from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 
-from todoapp.domain.models import is_category_expired
+from todoapp.domain.models import is_category_expired, is_done
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
@@ -56,7 +56,7 @@ class ListView:
                 r"""
                 <q-td :props="props">
                     <div class="row items-center q-gutter-x-sm">
-                        <span>{{ props.row.name }}</span>
+                        <span :style="props.row.done ? 'text-decoration: line-through; color: #9e9e9e' : ''">{{ props.row.name }}</span>
                         <q-badge outline color="primary">{{ props.row.schedule }}</q-badge>
                         <q-badge outline :color="props.row.category_color">
                             <span v-if="props.row.category_expired">❗️</span>{{ props.row.category_label }}
@@ -134,6 +134,7 @@ class ListView:
                 {
                     "id": item.id,
                     "name": item.name,
+                    "done": is_done(item, today),
                     "schedule": SCHEDULE_LABELS[item.schedule_type.value],
                     "anchor": item.anchor_date.strftime("%m/%d"),
                     "cumulative": format_duration(cumulative),

@@ -2,11 +2,14 @@ from datetime import date, datetime, timedelta
 
 from todoapp.domain.models import (
     Category,
+    DoneFilter,
     ExecutionRecord,
     ScheduleType,
     TodoItem,
     is_category_expired,
+    is_done,
     is_due_today,
+    matches_done_filter,
 )
 
 
@@ -133,3 +136,54 @@ def test_is_category_expired_on_the_expiry_date_itself_is_not_expired() -> None:
     # 有効期限日当日はまだ「期限切れ」とはみなされない
     category = Category(name="仕事", expiry_date=date(2026, 1, 1))
     assert not is_category_expired(category, date(2026, 1, 1))
+
+
+def test_todo_item_done_date_roundtrip() -> None:
+    item = _item(ScheduleType.DAILY, date(2026, 8, 24))
+    item.done_date = date(2026, 8, 30)
+
+    assert TodoItem.from_dict(item.to_dict()) == item
+
+
+def test_todo_item_from_dict_without_done_date_is_not_done() -> None:
+    data = _item(ScheduleType.DAILY, date(2026, 8, 24)).to_dict()
+    del data["done_date"]
+
+    assert TodoItem.from_dict(data).done_date is None
+
+
+def test_item_without_done_date_is_not_done() -> None:
+    for schedule_type in ScheduleType:
+        assert is_done(_item(schedule_type, date(2026, 8, 30)), date(2026, 8, 30)) is False
+
+
+def test_repeating_item_is_done_only_on_the_day_it_was_completed() -> None:
+    for schedule_type in (ScheduleType.DAILY, ScheduleType.WEEKLY, ScheduleType.MONTHLY):
+        item = _item(schedule_type, date(2026, 8, 30))
+        item.done_date = date(2026, 8, 30)
+
+        assert is_done(item, date(2026, 8, 30)) is True
+        assert is_done(item, date(2026, 8, 31)) is False
+        assert is_done(item, date(2026, 9, 6)) is False
+
+
+def test_one_time_item_stays_done() -> None:
+    item = _item(ScheduleType.ONE_TIME, date(2026, 8, 30))
+    item.done_date = date(2026, 8, 30)
+
+    assert is_done(item, date(2026, 8, 30)) is True
+    assert is_done(item, date(2026, 9, 30)) is True
+
+
+def test_matches_done_filter() -> None:
+    today = date(2026, 8, 30)
+    done_item = _item(ScheduleType.DAILY, today)
+    done_item.done_date = today
+    open_item = _item(ScheduleType.DAILY, today)
+
+    assert matches_done_filter(open_item, today, DoneFilter.ACTIVE) is True
+    assert matches_done_filter(done_item, today, DoneFilter.ACTIVE) is False
+    assert matches_done_filter(open_item, today, DoneFilter.DONE) is False
+    assert matches_done_filter(done_item, today, DoneFilter.DONE) is True
+    assert matches_done_filter(open_item, today, DoneFilter.ALL) is True
+    assert matches_done_filter(done_item, today, DoneFilter.ALL) is True

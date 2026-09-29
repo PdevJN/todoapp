@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from todoapp.domain.models import AppData, ScheduleType
+from todoapp.domain.models import AppData, DoneFilter, ScheduleType
 from todoapp.domain.service import ItemGapRow, TodoService
 
 
@@ -679,7 +679,7 @@ def test_category_today_item_totals_includes_due_items_without_records() -> None
 
     totals = service.category_today_item_totals(date(2026, 8, 30))
 
-    assert totals == {work.id: [("設計", 600), ("レビュー", 0)]}
+    assert totals == {work.id: [("設計", 600, False), ("レビュー", 0, False)]}
 
 
 def test_category_today_item_totals_appends_executed_items_not_due_today() -> None:
@@ -701,7 +701,7 @@ def test_category_today_item_totals_appends_executed_items_not_due_today() -> No
 
     totals = service.category_today_item_totals(date(2026, 8, 30))
 
-    assert totals == {work.id: [("日次", 60), ("臨時", 150)]}
+    assert totals == {work.id: [("日次", 60, False), ("臨時", 150, False)]}
 
 
 def test_category_today_item_totals_lists_deleted_item_records_as_uncategorized() -> None:
@@ -717,7 +717,7 @@ def test_category_today_item_totals_lists_deleted_item_records_as_uncategorized(
 
     totals = service.category_today_item_totals(date(2026, 8, 30))
 
-    assert totals == {None: [("旧タスク", 90)]}
+    assert totals == {None: [("旧タスク", 90, False)]}
 
 
 def test_category_today_item_totals_excludes_records_from_other_days() -> None:
@@ -863,3 +863,131 @@ def test_item_gap_rows_deleted_item_has_no_cumulative_estimate_or_gap() -> None:
     service.delete_item(item.id)
 
     assert service.item_gap_rows(date(2026, 8, 30)) == [ItemGapRow("旧タスク", 90, None, None, None)]
+
+
+TODAY = date(2026, 8, 30)
+
+
+def test_set_done_marks_items_done_today_and_saves() -> None:
+    service, repository, _ = _service()
+    a = service.add_item("A", ScheduleType.DAILY, TODAY)
+    b = service.add_item("B", ScheduleType.DAILY, TODAY)
+
+    service.set_done([a.id], True, TODAY)
+
+    assert a.done_date == TODAY
+    assert b.done_date is None
+    assert repository.saved is not None
+
+
+def test_set_done_false_clears_done_date() -> None:
+    service, _, _ = _service()
+    item = service.add_item("A", ScheduleType.DAILY, TODAY)
+    service.set_done([item.id], True, TODAY)
+
+    service.set_done([item.id], False, TODAY)
+
+    assert item.done_date is None
+
+
+def test_set_done_stops_running_item_and_keeps_its_record() -> None:
+    service, _, clock = _service()
+    item = service.add_item("A", ScheduleType.DAILY, TODAY)
+    service.start(item.id)
+    clock.advance(300)
+
+    service.set_done([item.id], True, TODAY)
+
+    assert service.running_record() is None
+    assert service.today_total_seconds(item.id, TODAY) == 300
+
+
+def test_set_done_does_not_stop_a_different_running_item() -> None:
+    service, _, _ = _service()
+    running = service.add_item("実行中", ScheduleType.DAILY, TODAY)
+    other = service.add_item("他", ScheduleType.DAILY, TODAY)
+    service.start(running.id)
+
+    service.set_done([other.id], True, TODAY)
+
+    assert service.running_record() is not None
+
+
+def test_toggle_done_marks_all_done_when_any_is_not_done() -> None:
+    service, _, _ = _service()
+    a = service.add_item("A", ScheduleType.DAILY, TODAY)
+    b = service.add_item("B", ScheduleType.DAILY, TODAY)
+    service.set_done([a.id], True, TODAY)
+
+    service.toggle_done([a.id, b.id], TODAY)
+
+    assert a.done_date == TODAY and b.done_date == TODAY
+
+
+def test_toggle_done_marks_all_undone_when_all_are_done() -> None:
+    service, _, _ = _service()
+    a = service.add_item("A", ScheduleType.DAILY, TODAY)
+    b = service.add_item("B", ScheduleType.DAILY, TODAY)
+    service.set_done([a.id, b.id], True, TODAY)
+
+    service.toggle_done([a.id, b.id], TODAY)
+
+    assert a.done_date is None and b.done_date is None
+
+
+def test_repeating_item_done_yesterday_is_not_done_today() -> None:
+    service, _, _ = _service()
+    item = service.add_item("A", ScheduleType.DAILY, TODAY)
+    service.set_done([item.id], True, TODAY)
+
+    service.toggle_done([item.id], TODAY + timedelta(days=1))
+
+    assert item.done_date == TODAY + timedelta(days=1)
+
+
+def test_items_due_today_filters_by_done_state() -> None:
+    service, _, _ = _service()
+    open_item = service.add_item("未完了", ScheduleType.DAILY, TODAY)
+    done_item = service.add_item("完了", ScheduleType.DAILY, TODAY)
+    service.set_done([done_item.id], True, TODAY)
+
+    assert service.items_due_today(TODAY, DoneFilter.ACTIVE) == [open_item]
+    assert service.items_due_today(TODAY, DoneFilter.DONE) == [done_item]
+    assert service.items_due_today(TODAY, DoneFilter.ALL) == [open_item, done_item]
+    assert service.items_due_today(TODAY) == [open_item, done_item]
+
+
+def test_move_item_to_takes_the_position_of_the_target_item() -> None:
+    service, _, _ = _service()
+    a = service.add_item("A", ScheduleType.DAILY, TODAY)
+    hidden = service.add_item("非表示", ScheduleType.DAILY, TODAY)
+    b = service.add_item("B", ScheduleType.DAILY, TODAY)
+
+    service.move_item_to(a.id, b.id)
+
+    assert [i.id for i in service.items] == [hidden.id, b.id, a.id]
+
+    service.move_item_to(a.id, hidden.id)
+
+    assert [i.id for i in service.items] == [a.id, hidden.id, b.id]
+
+
+def test_item_gap_rows_marks_done_items() -> None:
+    service, _, _ = _service()
+    item = service.add_item("A", ScheduleType.DAILY, TODAY)
+    service.add_item("B", ScheduleType.DAILY, TODAY)
+    service.set_done([item.id], True, TODAY)
+
+    rows = service.item_gap_rows(TODAY)
+
+    assert [(r.name, r.done) for r in rows] == [("A", True), ("B", False)]
+
+
+def test_category_today_item_totals_marks_done_items() -> None:
+    service, _, _ = _service()
+    work = service.add_category("仕事")
+    item = service.add_item("設計", ScheduleType.DAILY, TODAY)
+    service.set_item_category(item.id, work.id)
+    service.set_done([item.id], True, TODAY)
+
+    assert service.category_today_item_totals(TODAY) == {work.id: [("設計", 0, True)]}

@@ -7,10 +7,13 @@ from typing import NamedTuple, Protocol
 from todoapp.domain.models import (
     AppData,
     Category,
+    DoneFilter,
     ExecutionRecord,
     ScheduleType,
     TodoItem,
+    is_done,
     is_due_today,
+    matches_done_filter,
 )
 
 
@@ -27,6 +30,7 @@ class ItemGapRow(NamedTuple):
     cumulative_seconds: float | None
     estimate_seconds: int | None
     gap_seconds: float | None  # 累積経過時間 - 見積り(超過が正)
+    done: bool = False
 
 
 class TodoService:
@@ -162,8 +166,38 @@ class TodoService:
         self._data.items.insert(new_index, item)
         self._save()
 
-    def items_due_today(self, today: date) -> list[TodoItem]:
-        return [item for item in self._data.items if is_due_today(item, today)]
+    def move_item_to(self, item_id: str, target_id: str) -> None:
+        """アイテムを、対象アイテムのいま居る位置へ移動する(表示を絞っていても全体の並びを正しく更新するため)。"""
+        item = self._find_item(item_id)
+        target_index = next(i for i, other in enumerate(self._data.items) if other.id == target_id)
+        self._data.items.remove(item)
+        self._data.items.insert(target_index, item)
+        self._save()
+
+    def items_due_today(self, today: date, done_filter: DoneFilter = DoneFilter.ALL) -> list[TodoItem]:
+        return [
+            item
+            for item in self._data.items
+            if is_due_today(item, today) and matches_done_filter(item, today, done_filter)
+        ]
+
+    def set_done(self, item_ids: Iterable[str], done: bool, today: date) -> None:
+        ids = set(item_ids)
+        for item in self._data.items:
+            if item.id in ids:
+                item.done_date = today if done else None
+        running = self.running_record()
+        if done and running is not None and running.item_id in ids:
+            self.stop_running()
+            return
+        self._save()
+
+    def toggle_done(self, item_ids: Iterable[str], today: date) -> None:
+        """1件でも未完了があれば全て完了に、全て完了済みなら全て未完了に戻す。"""
+        ids = set(item_ids)
+        items = [item for item in self._data.items if item.id in ids]
+        all_done = bool(items) and all(is_done(item, today) for item in items)
+        self.set_done(ids, not all_done, today)
 
     def cumulative_seconds(self, item_id: str) -> float:
         now = self._clock()
@@ -296,18 +330,19 @@ class TodoService:
         order += [item_id for item_id in seconds_by_item if item_id not in order]
         return order, seconds_by_item, names
 
-    def category_today_item_totals(self, today: date) -> dict[str | None, list[tuple[str, float]]]:
+    def category_today_item_totals(self, today: date) -> dict[str | None, list[tuple[str, float, bool]]]:
         known_ids = {category.id for category in self._data.categories}
         items_by_id = {item.id: item for item in self._data.items}
         order, seconds_by_item, names = self._today_item_order(today)
 
-        result: dict[str | None, list[tuple[str, float]]] = {}
+        result: dict[str | None, list[tuple[str, float, bool]]] = {}
         for item_id in order:
             item = items_by_id.get(item_id)
             category_id = item.category_id if item is not None else None
             key = category_id if category_id in known_ids else None
             name = item.name if item is not None else names[item_id]
-            result.setdefault(key, []).append((name, seconds_by_item.get(item_id, 0.0)))
+            done = item is not None and is_done(item, today)
+            result.setdefault(key, []).append((name, seconds_by_item.get(item_id, 0.0), done))
         return result
 
     def item_gap_rows(self, today: date) -> list[ItemGapRow]:
@@ -323,12 +358,13 @@ class TodoService:
                 rows.append(ItemGapRow(names[item_id], today_seconds, None, None, None))
                 continue
             cumulative = self.cumulative_seconds(item_id)
+            done = is_done(item, today)
             # 見積りは10分=0.1666…時間のような小数で保存されるため、秒に丸める
             estimate = round(item.estimate_hours * 3600)
             if estimate > 0:
-                rows.append(ItemGapRow(item.name, today_seconds, cumulative, estimate, cumulative - estimate))
+                rows.append(ItemGapRow(item.name, today_seconds, cumulative, estimate, cumulative - estimate, done))
             else:
-                rows.append(ItemGapRow(item.name, today_seconds, cumulative, None, None))
+                rows.append(ItemGapRow(item.name, today_seconds, cumulative, None, None, done))
         return rows
 
     def kind_today_totals(self, today: date) -> dict[str, float]:

@@ -10,7 +10,7 @@ from todoapp.domain.models import Category, ExecutionRecord
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
 from todoapp.ui.dialog_base import DialogMixin
-from todoapp.ui.formatting import format_duration
+from todoapp.ui.formatting import DONE_TEXT_CLASSES, format_duration
 from todoapp.ui.js_handlers import CLIPBOARD_COPY_HANDLER
 
 _MODE_ORDER = "order"
@@ -18,7 +18,7 @@ _MODE_CATEGORY = "category"
 _MODE_LABELS = {_MODE_ORDER: "実行順", _MODE_CATEGORY: "カテゴリ別"}
 
 # (カテゴリ(Noneは未定), 本日の合計秒数, [(タスク名, 本日の実行秒数)])
-_CategoryRow = tuple[Category | None, float, list[tuple[str, float]]]
+_CategoryRow = tuple[Category | None, float, list[tuple[str, float, bool]]]
 
 
 class LogView(DialogMixin):
@@ -31,7 +31,7 @@ class LogView(DialogMixin):
         self._rendered_record_ids: list[str] = []
         self._select_anchor_index: int | None = None
         self._mode = _MODE_ORDER
-        self._category_signature: list[tuple[str | None, list[str]]] = []
+        self._category_signature: list[tuple[str | None, list[tuple[str, bool]]]] = []
         self._category_time_labels: list[tuple[ui.label, list[ui.label]]] = []
 
     def build(self) -> None:
@@ -69,7 +69,7 @@ class LogView(DialogMixin):
         self._update_copy_text(rows)
         for (total_label, item_labels), (_, seconds, items) in zip(self._category_time_labels, rows):
             total_label.set_text(format_duration(seconds))
-            for item_label, (_, item_seconds) in zip(item_labels, items):
+            for item_label, (_, item_seconds, _) in zip(item_labels, items):
                 item_label.set_text(format_duration(item_seconds))
 
     def _category_rows(self) -> list[_CategoryRow]:
@@ -189,7 +189,7 @@ class LogView(DialogMixin):
                 edit_button.tooltip("カレンダーで時間を編集")
 
     def _render_category_row(
-        self, category: Category | None, seconds: float, items: list[tuple[str, float]]
+        self, category: Category | None, seconds: float, items: list[tuple[str, float, bool]]
     ) -> tuple[ui.label, list[ui.label]]:
         classes = "w-full justify-between items-center border-b py-1 px-1 rounded"
         with ui.row().classes(classes + (" bg-gray-100" if category is None else "")):
@@ -205,10 +205,12 @@ class LogView(DialogMixin):
             with ui.tooltip().classes("text-sm"):
                 if not items:
                     ui.label("本日のタスクはありません")
-                for name, item_seconds in items:
+                for name, item_seconds, done in items:
+                    # 完了したアイテムは、他の画面と同じく取り消し線とグレーで表示する
+                    done_classes = f" {DONE_TEXT_CLASSES}" if done else ""
                     with ui.row().classes("w-full justify-between gap-4 no-wrap"):
-                        ui.label(f"・{name}")
-                        item_labels.append(ui.label(format_duration(item_seconds)).classes("font-mono"))
+                        ui.label(f"・{name}").classes(done_classes.strip())
+                        item_labels.append(ui.label(format_duration(item_seconds)).classes("font-mono" + done_classes))
         return total_label, item_labels
 
 
@@ -217,5 +219,9 @@ def category_durations_text(totals: list[tuple[Category | None, float]]) -> str:
     return "\n".join(format_duration(seconds) for category, seconds in totals if category is not None)
 
 
-def _signature(rows: list[_CategoryRow]) -> list[tuple[str | None, list[str]]]:
-    return [(category.id if category else None, [name for name, _ in items]) for category, _, items in rows]
+def _signature(rows: list[_CategoryRow]) -> list[tuple[str | None, list[tuple[str, bool]]]]:
+    # 完了状態が変わったときも、取り消し線を反映するため行を作り直す対象にする
+    return [
+        (category.id if category else None, [(name, done) for name, _, done in items])
+        for category, _, items in rows
+    ]

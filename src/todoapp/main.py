@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 
 import httpx
 from nicegui import ui
 from nicegui.events import ValueChangeEventArguments
 
+from todoapp.domain.models import DoneFilter
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import (
     ConfigRepository,
@@ -26,7 +28,7 @@ from todoapp.ui.confirm_dialog import ConfirmDialog
 from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.edit_dialog import EditDialog
 from todoapp.ui.help_dialog import HelpDialog
-from todoapp.ui.keyboard import KeyboardController
+from todoapp.ui.keyboard import SHORTCUT_KEYS, KeyboardController
 from todoapp.ui.list_view import ListView
 from todoapp.ui.log_view import LogView
 from todoapp.ui.main_view import MainView
@@ -104,10 +106,7 @@ def build_app() -> None:
         "const ignoreTags = ['input', 'select', 'button', 'textarea'];"
         "const focusedTag = document.activeElement && document.activeElement.tagName.toLowerCase();"
         "if (ignoreTags.includes(focusedTag) || e.metaKey || e.ctrlKey || e.altKey) return;"
-        "const shortcutKeys = ["
-        "'Escape', 'Enter', 'Backspace', 'Delete', 'ArrowUp', 'ArrowDown',"
-        "'e', 'c', 'l', 'L', 'g', 'T', 'j', 'k',"
-        "];"
+        f"const shortcutKeys = {json.dumps(SHORTCUT_KEYS)};"
         "if (shortcutKeys.includes(e.key)) e.preventDefault();"
         "});</script>"
     )
@@ -119,6 +118,17 @@ def build_app() -> None:
         calendar_view.refresh()
         category_list_dialog.refresh()
         category_summary_dialog.refresh()
+
+    def toggle_done_selected_items() -> None:
+        ids = set(state.selected_item_ids) or ({state.selected_item_id} if state.selected_item_id else set())
+        if not ids:
+            return
+        service.toggle_done(ids, date.today())
+        # 完了状態で絞り込んでいる間は、切り替えたアイテムが表示から外れるため選択も解除する
+        if state.screen is Screen.MAIN and state.done_filter is not DoneFilter.ALL:
+            state.select(None)
+            state.select_items(set())
+        refresh_all()
 
     def delete_selected_items() -> None:
         ids = set(state.selected_item_ids)
@@ -252,6 +262,7 @@ def build_app() -> None:
         open_category_list=category_list_dialog.open,
         open_category_edit_dialog=category_edit_dialog.open_for,
         open_category_summary=category_summary_dialog.open,
+        toggle_done_selected_items=toggle_done_selected_items,
         delete_selected_items=delete_selected_items,
         delete_selected_records=delete_selected_records,
         delete_selected_categories=delete_selected_categories,

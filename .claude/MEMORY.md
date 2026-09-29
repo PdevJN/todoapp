@@ -270,6 +270,18 @@ src/todoapp/
 - **ツールチップのはみ出し対策**(ユーザー要望): `_pie_options()`のツールチップに`confine: true`(円グラフの領域内へ寄せる)と、`extraCssText`による`max-width: 90%`・折り返しを追加。両タブの円グラフに効く。収まるのは円グラフの領域(=ダイアログ幅)までで、ウィンドウ全体ではない
 - `pytest`(149件)・`mypy src test`とも問題なし
 
+## 今回(2026-09-30、TODOアイテムの完了チェック)の作業
+
+- `develop`から`feature/item-done`ブランチを作成して実施
+- **完了の仕様**(ユーザーが選択): 選択アイテムを`d`キーで完了/未完了に切り替え(複数選択は、1件でも未完了があれば全て完了、全て完了なら全て未完了)。当初は永続フラグ案だったが、ユーザーの指示で`毎日`・`週次`・`月次`(繰り返し)は完了にした当日だけ完了、`当日`(one_time)のみ永続的に完了とした
+- **データ**: `TodoItem.done_date`(完了した日)を追加。キー無しの既存JSONは未完了。判定は`is_done(item, today)`に集約(one_timeは`done_date`があれば完了、繰り返しは`done_date == today`)。`DoneFilter`(`ACTIVE`/`ALL`/`DONE`)と`matches_done_filter()`を追加
+- **ドメイン**: `TodoService.set_done()`・`toggle_done()`・`move_item_to()`を追加、`items_due_today()`に`done_filter`引数(既定`ALL`)を追加。実行中のアイテムを完了にすると停止し記録は残す。`ItemGapRow.done`を追加し、`category_today_item_totals()`の各要素を`(名前, 秒, 完了)`の3要素にした
+- **メインパネル**: 上部に`未完了のみ`/`すべて`/`完了のみ`のトグル(既定は未完了のみ、`AppState.done_filter`、保存しない)。切り替え時は選択を解除。実行中のアイテムは絞り込みに関わらず元の並びの位置で表示。`d`で完了にして絞り込みから外れたアイテムの選択も解除する
+- **既存不具合の修正**: 並べ替え(`reorder`)は、表示上の位置をそのまま全アイテムの位置として使っていたため、絞り込みで一部が非表示だとずれる。メインパネルは移動したアイテムを「移動先に居たアイテムの位置」へ動かす`move_item_to()`に変更した(`reorder()`自体は残している)
+- **表示**: 取り消し線とグレー(`formatting.DONE_TEXT_CLASSES`)を、メインパネル・編集一覧(列スロットのインラインstyle)・集計画面のアイテム別タブ・作業ログのカテゴリ別ツールチップに適用。ツールチップは、完了状態が変わったときも行を作り直せるよう`_signature`に完了状態を含める
+- **`d`キーで警告音が鳴る不具合**(ユーザーが発見): 原因は、WKWebViewでフォーカス先が無いときに処理されないキーがシステム警告音を鳴らすのを防ぐため、`main.py`のJSが`shortcutKeys`のリストに載るキーだけ`preventDefault()`していたのに、新しい`d`をそのリストへ追加し忘れていたこと。リストを`keyboard.py`の`SHORTCUT_KEYS`に一本化し(`main.py`はこれをJSへ埋め込む)、`test/ui/test_keyboard.py`で`KeyboardController`が処理する単一文字キーの登録漏れを検出する(`Cmd/Ctrl+A`は別処理のため除外)。今後キー操作を追加するときは`SHORTCUT_KEYS`にも追加すること
+- `pytest`(168件)・`mypy src test`とも問題なし
+
 ## 未実施・今後の検討事項
 
 - `main`へのマージはまだ行っていない

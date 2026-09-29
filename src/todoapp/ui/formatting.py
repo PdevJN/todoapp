@@ -8,6 +8,11 @@ SCHEDULE_LABELS = {
 }
 
 
+# 完了したアイテムの表示(取り消し線とグレーのフォント)。画面をまたいで共通にする
+DONE_TEXT_CLASSES = "line-through text-gray-400"
+DONE_FILTER_LABELS = {"active": "未完了のみ", "all": "すべて", "done": "完了のみ"}
+
+
 def format_duration(seconds: float) -> str:
     total_seconds = max(int(seconds), 0)
     hours, remainder = divmod(total_seconds, 3600)
