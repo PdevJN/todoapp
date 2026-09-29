@@ -27,12 +27,88 @@ export default {
     // タスク名のみ表示し(displayEventTime: false)、マウスオーバー時のツールチップで
     // 開始・終了・経過時間(Python側extendedProps.tooltipで組み立て済み)を確認できるように
     // する。tooltipが無いイベント(祝日の背景イベント等)はタイトルのみをフォールバック表示
+    // upstream(zauberzeug/nicegui examples/fullcalendar)には無い処理。ドラッグ&ドロップ
+    // (eventDrop)・端のリサイズ(eventResize)で確定した開始・終了時刻をPython側へ通知する。
+    // 表示位置の更新はPython側が隣接記録への吸着を計算した上でeventsを再設定して行うため、
+    // FullCalendarが動かした位置は必ずrevertしてから通知する。日時はタイムゾーン無しの
+    // ローカル時刻文字列にする(startStrはオフセット付きになり、Python側で扱いづらいため)
+    const localIso = (date) => {
+      const p = (n) => String(n).padStart(2, "0");
+      return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}` +
+        `T${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
+    };
+    const emitChange = (info, kind) => {
+      const { id, start, end } = info.event;
+      const edge = kind === "resize" ? (info.startDelta.milliseconds || info.startDelta.days ? "start" : "end") : null;
+      const detail = { id, kind, edge, start: localIso(start), end: localIso(end) };
+      info.revert();
+      this.$emit("event_change", detail);
+    };
+    // upstream(zauberzeug/nicegui examples/fullcalendar)には無い処理。ドラッグ・リサイズ中、
+    // 動かしているバー(FullCalendarが描画するミラー)が他のバーと重なったら、密着する境界
+    // (ミラーの中心が他のバーの上半分なら上端、下半分なら下端)に濃い赤の線を表示する。
+    // Python側の吸着計算(record_layout)とは独立した、画面上の位置からの目安表示であり、
+    // 「収まらないため元に戻す」ケースまでは反映しない
+    const start = () => this._startSnapGuide();
+    const stop = () => this._stopSnapGuide();
+    this.options.eventDragStart = start;
+    this.options.eventResizeStart = start;
+    this.options.eventDragStop = stop;
+    this.options.eventResizeStop = stop;
+    this.options.eventDrop = (info) => emitChange(info, "move");
+    this.options.eventResize = (info) => emitChange(info, "resize");
     this.options.eventDidMount = (info) => {
       const tooltip = info.event.extendedProps && info.event.extendedProps.tooltip;
       info.el.title = tooltip || info.event.title || "";
     };
   },
   methods: {
+    _startSnapGuide() {
+      this._stopSnapGuide();
+      const guide = document.createElement("div");
+      guide.style.cssText =
+        "position:absolute;height:3px;background:#b71c1c;pointer-events:none;z-index:20;display:none;";
+      this.$el.style.position = "relative";
+      this.$el.appendChild(guide);
+      this._snapGuide = guide;
+      this._onSnapMove = () => this._updateSnapGuide();
+      document.addEventListener("mousemove", this._onSnapMove);
+    },
+    _stopSnapGuide() {
+      if (this._onSnapMove) {
+        document.removeEventListener("mousemove", this._onSnapMove);
+        this._onSnapMove = null;
+      }
+      if (this._snapGuide) {
+        this._snapGuide.remove();
+        this._snapGuide = null;
+      }
+    },
+    _updateSnapGuide() {
+      const guide = this._snapGuide;
+      const mirror = this.$el.querySelector(".fc-event-mirror");
+      if (!guide || !mirror) {
+        if (guide) guide.style.display = "none";
+        return;
+      }
+      const m = mirror.getBoundingClientRect();
+      const base = this.$el.getBoundingClientRect();
+      const others = this.$el.querySelectorAll(
+        ".fc-event:not(.fc-event-mirror):not(.fc-event-dragging):not(.fc-event-resizing)"
+      );
+      for (const el of others) {
+        const o = el.getBoundingClientRect();
+        if (m.top < o.bottom && m.bottom > o.top && m.left < o.right && m.right > o.left) {
+          const above = m.top + m.height / 2 < o.top + o.height / 2;
+          guide.style.left = `${o.left - base.left}px`;
+          guide.style.width = `${o.width}px`;
+          guide.style.top = `${(above ? o.top : o.bottom) - base.top - 1}px`;
+          guide.style.display = "block";
+          return;
+        }
+      }
+      guide.style.display = "none";
+    },
     _applyHolidayTitles() {
       const holidays = this.options.holidays || {};
       this.$el.querySelectorAll("[data-date]").forEach((el) => {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date, datetime
 
 from nicegui import ui
@@ -21,9 +22,12 @@ _CategoryRow = tuple[Category | None, float, list[tuple[str, float]]]
 
 
 class LogView(DialogMixin):
-    def __init__(self, service: TodoService, state: AppState) -> None:
+    def __init__(
+        self, service: TodoService, state: AppState, open_timeline_edit: Callable[[str], None]
+    ) -> None:
         self._service = service
         self._state = state
+        self._open_timeline_edit = open_timeline_edit
         self._rendered_record_ids: list[str] = []
         self._select_anchor_index: int | None = None
         self._mode = _MODE_ORDER
@@ -175,7 +179,14 @@ class LogView(DialogMixin):
                 args=["ctrlKey", "metaKey", "shiftKey"],
             )
             ui.label(record.item_name).classes("font-medium")
-            ui.label(f"{start} - {end} ({elapsed})").classes("text-gray-500 font-mono")
+            with ui.row().classes("items-center gap-1 no-wrap"):
+                ui.label(f"{start} - {end} ({elapsed})").classes("text-gray-500 font-mono")
+                # 実行中の記録は終了時刻が未確定のためカレンダーでは編集できない。
+                # 行クリック(選択)を発火させないよう、クリックの伝播を止める
+                edit_button = ui.button(icon="calendar_month").props("flat dense round size=sm")
+                edit_button.on("click.stop", lambda rid=record.id: self._open_timeline_edit(rid))
+                edit_button.set_enabled(record.end_time is not None)
+                edit_button.tooltip("カレンダーで時間を編集")
 
     def _render_category_row(
         self, category: Category | None, seconds: float, items: list[tuple[str, float]]

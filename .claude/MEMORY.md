@@ -233,6 +233,16 @@ src/todoapp/
 - `pytest`(109件)・`mypy src test`とも問題なし。ユーザーが実機で確認済み
 - 確認用に`~/.todoapp/todos.json`の一部アイテム(`test1`・`test2`)の見積りを一時的に1分へ書き換えて確認した(事前にバックアップを取り、アプリを終了してから編集)。確認後はユーザーの指示でバックアップから完全に復元し、バックアップは削除済み。復元により確認中に作成した`test5`と実行記録4件は消えている
 
+## 今回(2026-09-30、作業ログの記録をカレンダーのドラッグ&ドロップで編集)の作業
+
+- `develop`から`feature/record-timeline-edit`ブランチを作成して実施。ユーザーが実機で確認済み
+- **仕様(ユーザーが選択)**: バー全体の移動(所要時間維持)+上下端のリサイズ、隣接記録の境界(秒精度)へ吸着、同日の他記録は淡色で固定表示、実行中の記録は編集不可(ボタン無効)、`保存`で確定(ドラッグ即保存ではない)
+- **吸着ロジック**(`domain/record_layout.py`、新規): `truncate_to_minute`・`snap_move`・`snap_resize`の純粋関数。移動は所要時間を維持して近い側の境界へ寄せ、収まらなければ反対側を試し、どちらも不可なら`None`(元に戻す)。1分未満の記録は移動時に元の所要時間を使う。リサイズは動かした端のみ寄せ、所要時間が1分未満なら`None`。`test/domain/test_record_layout.py`(18件)でテスト
+- **FullCalendarラッパー拡張**(`ui/vendor/fullcalendar/`): `on_change`引数を追加。JS側は`eventDrop`/`eventResize`で`{id, kind, edge, start, end}`(ローカル時刻文字列)をemitし、FullCalendarが動かした位置は必ず`revert`する。表示位置はPython側が吸着を計算後にeventsを再設定して更新するため。既存の`Shift+L`カレンダーは`editable`未指定のため影響なし
+- **`RecordTimelineDialog`**(`ui/record_timeline_dialog.py`、新規): `timeGridDay`・ヘッダーなし・`snapDuration`1分。作業ログの`実行順`の各行にカレンダーアイコンのボタン(`click.stop`で行選択を発火させない)から起動
+- **吸着ガイド線**(ユーザー要望で追加): ドラッグ・リサイズ中にバーが他の記録と重なったら、密着する境界(バー中心が相手の上半分なら上端、下半分なら下端)に濃い赤(`#b71c1c`)の線を表示。`fullcalendar.js`の`_startSnapGuide`等で画面上の位置から求める目安表示であり、Python側の吸着計算(収まらず元に戻すケース)とは一致しない場合がある。JSの変更はアプリ再起動で反映される
+- `pytest`(127件)・`mypy src test`とも問題なし
+
 ## 未実施・今後の検討事項
 
 - `main`へのマージはまだ行っていない
