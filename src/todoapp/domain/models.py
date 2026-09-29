@@ -73,6 +73,7 @@ class TodoItem:
     anchor_date: date
     estimate_hours: float = 0.0
     category_id: str | None = None
+    done_date: date | None = None  # 完了した日(最後に完了にした日)。判定はis_done()を使う
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def to_dict(self) -> dict[str, Any]:
@@ -83,10 +84,12 @@ class TodoItem:
             "anchor_date": self.anchor_date.isoformat(),
             "estimate_hours": self.estimate_hours,
             "category_id": self.category_id,
+            "done_date": self.done_date.isoformat() if self.done_date else None,
         }
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> TodoItem:
+        done_date = data.get("done_date")
         return TodoItem(
             id=data["id"],
             name=data["name"],
@@ -94,6 +97,7 @@ class TodoItem:
             anchor_date=date.fromisoformat(data["anchor_date"]),
             estimate_hours=data["estimate_hours"],
             category_id=data.get("category_id"),
+            done_date=date.fromisoformat(done_date) if done_date else None,
         )
 
 
@@ -144,6 +148,27 @@ class AppData:
 def _clamped_day(anchor_day: int, target: date) -> int:
     last_day_of_target_month = calendar.monthrange(target.year, target.month)[1]
     return min(anchor_day, last_day_of_target_month)
+
+
+class DoneFilter(str, Enum):
+    ACTIVE = "active"
+    ALL = "all"
+    DONE = "done"
+
+
+def is_done(item: TodoItem, today: date) -> bool:
+    """完了済みか。繰り返し(毎日・週次・月次)は完了した日だけ、当日(one_time)は永続的に完了とする。"""
+    if item.done_date is None:
+        return False
+    if item.schedule_type is ScheduleType.ONE_TIME:
+        return True
+    return item.done_date == today
+
+
+def matches_done_filter(item: TodoItem, today: date, done_filter: DoneFilter) -> bool:
+    if done_filter is DoneFilter.ALL:
+        return True
+    return is_done(item, today) is (done_filter is DoneFilter.DONE)
 
 
 def is_due_today(item: TodoItem, today: date) -> bool:

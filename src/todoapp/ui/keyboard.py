@@ -8,6 +8,14 @@ from nicegui.events import KeyEventArguments
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
 
+# KeyboardControllerが処理するキー。ネイティブウィンドウ(WKWebView)では、フォーカス先が無い状態で
+# 押されたキーを誰も処理しないとシステム警告音が鳴るため、main.pyがこれらをpreventDefault()する。
+# キー操作を追加したら、ここにも追加すること(test_keyboard.pyが登録漏れを検出する)
+SHORTCUT_KEYS = [
+    "Escape", "Enter", "Backspace", "Delete", "ArrowUp", "ArrowDown",
+    "e", "c", "d", "l", "L", "g", "T", "j", "k",
+]  # fmt: skip
+
 
 class KeyboardController:
     def __init__(
@@ -25,6 +33,7 @@ class KeyboardController:
         open_category_list: Callable[[], None],
         open_category_edit_dialog: Callable[[str], None],
         open_category_summary: Callable[[], None],
+        toggle_done_selected_items: Callable[[], None],
         delete_selected_items: Callable[[], None],
         delete_selected_records: Callable[[], None],
         delete_selected_categories: Callable[[], None],
@@ -57,6 +66,7 @@ class KeyboardController:
         self._open_category_list = open_category_list
         self._open_category_edit_dialog = open_category_edit_dialog
         self._open_category_summary = open_category_summary
+        self._toggle_done_selected_items = toggle_done_selected_items
         self._delete_selected_items = delete_selected_items
         self._delete_selected_records = delete_selected_records
         self._delete_selected_categories = delete_selected_categories
@@ -144,6 +154,8 @@ class KeyboardController:
                 self._open_record_edit_dialog(self._state.selected_record_id)
             elif item_id is not None:
                 self._open_edit_dialog(item_id)
+        elif e.key == "d" and not self._is_dialog_open():
+            self._toggle_done_selected_items()
         elif e.key == "c" and item_id is not None:
             self._service.cancel_running(item_id)
             self._refresh_all()

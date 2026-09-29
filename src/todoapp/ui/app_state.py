@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from todoapp.domain.models import DoneFilter
+
 
 class Screen(Enum):
     MAIN = "main"
@@ -12,6 +14,7 @@ class Screen(Enum):
 @dataclass
 class AppState:
     screen: Screen = Screen.MAIN
+    done_filter: DoneFilter = DoneFilter.ACTIVE
     selected_item_id: str | None = None
     selected_record_id: str | None = None
     selected_category_id: str | None = None

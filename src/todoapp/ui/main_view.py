@@ -6,13 +6,13 @@ from datetime import date, datetime
 from nicegui import ui
 from nicegui.elements.dark_mode import DarkMode
 from nicegui.elements.fab import FabAction
-from nicegui.events import GenericEventArguments, SortableEventArguments
+from nicegui.events import GenericEventArguments, SortableEventArguments, ValueChangeEventArguments
 
-from todoapp.domain.models import ScheduleType, TodoItem, is_category_expired
+from todoapp.domain.models import DoneFilter, ScheduleType, TodoItem, is_category_expired, is_done, matches_done_filter
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
-from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration, format_estimate
+from todoapp.ui.formatting import DONE_FILTER_LABELS, DONE_TEXT_CLASSES, SCHEDULE_LABELS, format_duration, format_estimate
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 
 _THEME_ACTIVE_COLOR = "primary"
@@ -78,6 +78,10 @@ class MainView:
                 ui.spinner("hourglass", color="primary")
                 self._running_name_label = ui.label().classes("font-medium text-lg")
                 self._running_remaining_label = ui.label().classes("font-mono text-lg")
+            # 完了アイテムの表示は、未完了のみ(既定)・すべて・完了のみを切り替える
+            self._done_filter_toggle = ui.toggle(
+                DONE_FILTER_LABELS, value=self._state.done_filter.value, on_change=self._on_done_filter_change
+            ).props("dense")
             self.list_container = ui.column().classes("w-full gap-1")
             # delayを設定しないと、素早いクリック(特にダブルクリック)時のわずかなカーソルの
             # ブレでSortableJSがドラッグ開始と誤判定し、click/dblclickイベントが失われることがある
@@ -202,8 +206,22 @@ class MainView:
         self._service.toggle_execution(item_id)
         self._refresh_all()
 
+    def _on_done_filter_change(self, e: ValueChangeEventArguments[str]) -> None:
+        self._state.done_filter = DoneFilter(e.value)
+        # 絞り込みで見えなくなったアイテムが選択されたままにならないよう、選択を解除する
+        self._select_all_active = False
+        self._state.select(None)
+        self._state.select_items(set())
+        self.render.refresh()
+
     def _on_reorder(self, e: SortableEventArguments) -> None:
-        self._service.reorder(e.old_index, e.new_index)
+        # 完了アイテムを非表示にしていると、表示上の位置と全アイテムの中での位置がずれるため、
+        # 移動したアイテムを、移動先に居たアイテムの位置へ動かす形で全体の並びを更新する
+        ids = self._rendered_item_ids
+        moved_id = ids[e.old_index]
+        target_id = ids[e.new_index]
+        if moved_id != target_id:
+            self._service.move_item_to(moved_id, target_id)
         self._refresh_all()
 
     def _tick(self) -> None:
@@ -248,7 +266,14 @@ class MainView:
         self.list_container.clear()
         with self.list_container:
             today = date.today()
-            items = self._service.items_due_today(today)
+            # 実行中のアイテムは、完了状態による絞り込みに関わらず(元の並びの位置で)表示する
+            running = self._service.running_record()
+            items = [
+                item
+                for item in self._service.items_due_today(today)
+                if matches_done_filter(item, today, self._state.done_filter)
+                or (running is not None and running.item_id == item.id)
+            ]
             self._rendered_item_ids = [item.id for item in items]
             if not items:
                 ui.label("").classes("text-gray-400 italic h-8")
@@ -274,7 +299,8 @@ class MainView:
             category_label = f"{expired_mark}{category.name}" if category is not None else "未定"
             category_color = category.color if category is not None else "grey"
             ui.badge(category_label).props(f"outline color={category_color}")
-            ui.label(item.name).classes("font-medium")
+            name_classes = "font-medium" + (f" {DONE_TEXT_CLASSES}" if is_done(item, today) else "")
+            ui.label(item.name).classes(name_classes)
             ui.badge(SCHEDULE_LABELS[item.schedule_type.value]).props("outline")
             if is_running:
                 assert running is not None

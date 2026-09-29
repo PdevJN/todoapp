@@ -8,7 +8,7 @@ from nicegui import ui
 from todoapp.domain.models import Category
 from todoapp.domain.service import ItemGapRow, TodoService
 from todoapp.ui.dialog_base import DialogMixin
-from todoapp.ui.formatting import format_duration, format_gap, gap_background
+from todoapp.ui.formatting import DONE_TEXT_CLASSES, format_duration, format_gap, gap_background
 
 UNCATEGORIZED_COLOR = "#9e9e9e"
 _TAB_CATEGORY = "カテゴリ別"
@@ -68,6 +68,7 @@ class CategorySummaryDialog(DialogMixin):
     def __init__(self, service: TodoService) -> None:
         self._service = service
         self._selected_key: str | None = None
+        self._built = False
         # 円グラフの表示状態はタブごとに独立して持つ
         self._pie_visible = {_TAB_CATEGORY: False, _TAB_ITEM: False}
 
@@ -97,6 +98,7 @@ class CategorySummaryDialog(DialogMixin):
                     )
                     self.item_container = ui.column().classes("w-full gap-0")
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
+        self._built = True
 
     def _build_pie(self, tooltip_formatter: str, empty_text: str) -> tuple[ui.column, ui.echart, ui.label]:
         container = ui.column().classes("w-full items-center")
@@ -138,7 +140,9 @@ class CategorySummaryDialog(DialogMixin):
                 ui.label(f"{kind}: {format_duration(kind_totals[kind])}").classes("font-mono text-right w-full")
 
     def _on_tab_change(self) -> None:
-        self._apply_pie_visibility()
+        # タブの初期値が設定される組み立て中にも呼ばれるため、部品が揃うまでは何もしない
+        if self._built:
+            self._apply_pie_visibility()
 
     def _refresh_items(self, rows: list[ItemGapRow]) -> None:
         self._update_pie(self.gap_pie_chart, self.gap_pie_empty_label, gap_pie_data(rows))
@@ -159,7 +163,8 @@ class CategorySummaryDialog(DialogMixin):
 
     def _render_item_row(self, row: ItemGapRow) -> None:
         with ui.row().classes(_ITEM_ROW_CLASSES):
-            ui.label(row.name).classes("col font-medium ellipsis")
+            name_classes = "col font-medium ellipsis" + (f" {DONE_TEXT_CLASSES}" if row.done else "")
+            ui.label(row.name).classes(name_classes)
             ui.label(format_duration(row.today_seconds)).classes(_ITEM_NUMBER_CLASSES)
             ui.label(_format_optional(row.cumulative_seconds)).classes(_ITEM_NUMBER_CLASSES)
             ui.label(_format_optional(row.estimate_seconds)).classes(_ITEM_NUMBER_CLASSES)
