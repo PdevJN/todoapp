@@ -8,7 +8,7 @@ from nicegui.elements.dark_mode import DarkMode
 from nicegui.elements.fab import FabAction
 from nicegui.events import GenericEventArguments, SortableEventArguments
 
-from todoapp.domain.models import ScheduleType, TodoItem
+from todoapp.domain.models import ScheduleType, TodoItem, is_category_expired
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
@@ -261,6 +261,11 @@ class MainView:
             self._row_elements[item.id] = row
             row.on("click", lambda e, i=item.id: self._on_row_click(i, e), args=["ctrlKey", "metaKey", "shiftKey"])
             row.on("dblclick", lambda i=item.id: self._toggle(i))
+            category = self._service.category_for_item(item.id)
+            expired_mark = "❗️" if category is not None and is_category_expired(category, today) else ""
+            category_label = f"{expired_mark}{category.name}" if category is not None else "未定"
+            category_color = category.color if category is not None else "grey"
+            ui.badge(category_label).props(f"outline color={category_color}")
             ui.label(item.name).classes("font-medium")
             ui.badge(SCHEDULE_LABELS[item.schedule_type.value]).props("outline")
             if is_running:
