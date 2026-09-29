@@ -232,8 +232,8 @@ class TodoService:
         self._save()
 
     def category_for_item(self, item_id: str) -> Category | None:
-        item = self._find_item(item_id)
-        if item.category_id is None:
+        item = next((i for i in self._data.items if i.id == item_id), None)
+        if item is None or item.category_id is None:
             return None
         for category in self._data.categories:
             if category.id == item.category_id:

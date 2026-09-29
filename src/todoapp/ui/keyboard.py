@@ -20,6 +20,7 @@ class KeyboardController:
         is_category_list_open: Callable[[], bool],
         open_edit_dialog: Callable[[str], None],
         open_log_dialog: Callable[[], None],
+        open_calendar_view: Callable[[], None],
         open_record_edit_dialog: Callable[[str], None],
         open_category_list: Callable[[], None],
         open_category_edit_dialog: Callable[[str], None],
@@ -51,6 +52,7 @@ class KeyboardController:
         self._is_category_list_open = is_category_list_open
         self._open_edit_dialog = open_edit_dialog
         self._open_log_dialog = open_log_dialog
+        self._open_calendar_view = open_calendar_view
         self._open_record_edit_dialog = open_record_edit_dialog
         self._open_category_list = open_category_list
         self._open_category_edit_dialog = open_category_edit_dialog
@@ -147,6 +149,8 @@ class KeyboardController:
             self._refresh_all()
         elif e.key == "l":
             self._open_log_dialog()
+        elif e.key == "L":
+            self._open_calendar_view()
         elif e.key == "g" and self._state.screen is Screen.MAIN:
             self._open_category_list()
         elif e.key == "T" and self._state.screen in (Screen.MAIN, Screen.LIST):

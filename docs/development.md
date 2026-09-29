@@ -14,11 +14,13 @@ uv run mypy src test           # 型チェック(strict)
 ```
 src/todoapp/
 ├── domain/        # NiceGUIに依存しないドメインロジック(TodoItem, Category, TodoService等)
-├── repository/     # JSON永続化(json_repository.py: todos.json / config_repository.py: config.json)
+├── repository/     # JSON永続化(json_repository.py: todos.json / config_repository.py: config.json / holiday_repository.py: holidays.json・祝日CSV取得)
 ├── ui/              # NiceGUI画面
 │   ├── main_view.py             # メインパネル(一覧・新規登録・テーマFAB・実行中フローティング表示)
 │   ├── list_view.py             # 編集一覧
 │   ├── log_view.py              # 本日の作業ログ
+│   ├── calendar_view.py         # 実行履歴のカレンダー表示(当日/週/月、FullCalendar)
+│   ├── vendor/fullcalendar/     # FullCalendarライブラリのベンダリング(NiceGUI公式example無改変)
 │   ├── category_*.py            # カテゴリ一覧/編集/種別入力/選択/集計の各ダイアログ
 │   ├── edit_dialog.py           # アイテム編集フォーム
 │   ├── record_edit_dialog.py    # 記録編集フォーム
@@ -34,7 +36,8 @@ src/todoapp/
 | ファイル | 内容 |
 |---|---|
 | `~/.todoapp/todos.json` | アイテム・実行記録・カテゴリ |
-| `~/.todoapp/config.json` | テーマ設定(`auto`/`light`/`dark`) |
+| `~/.todoapp/config.json` | テーマ設定(`auto`/`light`/`dark`)・週次カレンダーの週の開始曜日 |
+| `~/.todoapp/holidays.json` | 祝日データのキャッシュ(内閣府CSVから取得) |
 
 ## 規約
 

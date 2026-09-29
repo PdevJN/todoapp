@@ -275,6 +275,14 @@ def test_category_for_item_is_none_when_uncategorized() -> None:
     assert service.category_for_item(item.id) is None
 
 
+def test_category_for_item_is_none_when_item_no_longer_exists() -> None:
+    service, _, _ = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30))
+    service.delete_item(item.id)
+
+    assert service.category_for_item(item.id) is None
+
+
 def test_category_today_totals_groups_by_item_category() -> None:
     service, _, clock = _service()
     work = service.add_category("仕事")

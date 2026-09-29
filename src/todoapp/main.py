@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+from datetime import date
+
+import httpx
 from nicegui import ui
 from nicegui.events import ValueChangeEventArguments
 
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import (
-    AppConfig,
     ConfigRepository,
+    WeekStart,
     dark_mode_value_to_theme,
     theme_to_dark_mode_value,
 )
+from todoapp.repository.holiday_repository import HolidayRepository, fetch_holiday_csv, parse_holiday_csv
 from todoapp.repository.json_repository import JsonTodoRepository
 from todoapp.ui.app_state import AppState, Screen
+from todoapp.ui.calendar_view import CalendarView
 from todoapp.ui.category_edit_dialog import CategoryEditDialog
 from todoapp.ui.category_kind_dialog import CategoryKindDialog
 from todoapp.ui.category_list_dialog import CategoryListDialog
@@ -38,7 +43,34 @@ def build_app() -> None:
     config = config_repository.load()
 
     def _on_theme_change(e: ValueChangeEventArguments[bool | None]) -> None:
-        config_repository.save(AppConfig(theme=dark_mode_value_to_theme(e.value)))
+        # config全体を作り直すと他の設定(週の開始曜日等)を消してしまうため、
+        # 読み込み済みのconfigを直接書き換えて保存する
+        config.theme = dark_mode_value_to_theme(e.value)
+        config_repository.save(config)
+
+    def _on_week_start_change(week_start: WeekStart) -> None:
+        config.week_start = week_start
+        config_repository.save(config)
+
+    holiday_repository = HolidayRepository()
+    holidays: dict[date, str] = holiday_repository.load()
+
+    def _refresh_holidays() -> bool:
+        try:
+            fetched = parse_holiday_csv(fetch_holiday_csv())
+        except (httpx.HTTPError, ValueError):
+            return False
+        if not fetched:
+            return False
+        holidays.clear()
+        holidays.update(fetched)
+        holiday_repository.save(holidays)
+        return True
+
+    if not holidays:
+        # キャッシュが無い初回起動時のみ自動取得を試みる(内閣府の祝日CSV)。
+        # オフライン等で失敗しても起動は継続し、後から手動更新ボタンで再試行できる
+        _refresh_holidays()
 
     # value=Noneでシステムのダーク/ライト設定に追従する「自動」がデフォルトになる
     dark_mode = ui.dark_mode(value=theme_to_dark_mode_value(config.theme), on_change=_on_theme_change)
@@ -72,7 +104,7 @@ def build_app() -> None:
         "if (ignoreTags.includes(focusedTag) || e.metaKey || e.ctrlKey || e.altKey) return;"
         "const shortcutKeys = ["
         "'Escape', 'Enter', 'Backspace', 'Delete', 'ArrowUp', 'ArrowDown',"
-        "'e', 'c', 'l', 'g', 'T', 'j', 'k',"
+        "'e', 'c', 'l', 'L', 'g', 'T', 'j', 'k',"
         "];"
         "if (shortcutKeys.includes(e.key)) e.preventDefault();"
         "});</script>"
@@ -82,6 +114,7 @@ def build_app() -> None:
         main_view.render.refresh()
         list_view.render.refresh()
         log_view.refresh()
+        calendar_view.refresh()
         category_list_dialog.refresh()
         category_summary_dialog.refresh()
 
@@ -161,12 +194,21 @@ def build_app() -> None:
     edit_dialog = EditDialog(service, refresh_all=refresh_all)
     log_view = LogView(service, state)
     record_edit_dialog = RecordEditDialog(service, refresh_all=refresh_all)
+    calendar_view = CalendarView(
+        service,
+        open_record_edit_dialog=record_edit_dialog.open_for,
+        initial_week_start=config.week_start,
+        on_week_start_change=_on_week_start_change,
+        holidays=holidays,
+        refresh_holidays=_refresh_holidays,
+    )
 
     main_root = main_view.build()
     list_root = list_view.build()
     edit_dialog.build()
     log_view.build()
     record_edit_dialog.build()
+    calendar_view.build()
     category_list_dialog.build()
     category_edit_dialog.build()
     category_summary_dialog.build()
@@ -182,6 +224,7 @@ def build_app() -> None:
         edit_dialog,
         log_view,
         record_edit_dialog,
+        calendar_view,
         category_list_dialog,
         category_edit_dialog,
         category_summary_dialog,
@@ -199,6 +242,7 @@ def build_app() -> None:
         is_category_list_open=category_list_dialog.is_open,
         open_edit_dialog=edit_dialog.open_for,
         open_log_dialog=log_view.open,
+        open_calendar_view=calendar_view.open,
         open_record_edit_dialog=record_edit_dialog.open_for,
         open_category_list=category_list_dialog.open,
         open_category_edit_dialog=category_edit_dialog.open_for,
