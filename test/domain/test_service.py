@@ -603,3 +603,131 @@ def test_category_today_totals_excludes_records_from_other_days() -> None:
     totals = service.category_today_totals(date(2026, 8, 30))
 
     assert totals == {category.id: 120}
+
+
+def test_category_today_all_totals_includes_categories_without_records() -> None:
+    service, _, clock = _service()
+    work = service.add_category("仕事")
+    sales = service.add_category("営業")
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item.id, work.id)
+
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+
+    totals = service.category_today_all_totals(date(2026, 8, 30))
+
+    assert totals == [(work, 600), (sales, 0), (None, 0)]
+
+
+def test_category_today_all_totals_puts_uncategorized_last() -> None:
+    service, _, clock = _service()
+    work = service.add_category("仕事")
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+
+    service.start(item.id)
+    clock.advance(300)
+    service.stop_running()
+
+    totals = service.category_today_all_totals(date(2026, 8, 30))
+
+    assert totals == [(work, 0), (None, 300)]
+
+
+def test_category_today_all_totals_counts_unknown_category_as_uncategorized() -> None:
+    # 存在しないカテゴリIDを持つアイテムの記録は「未定」に合算する
+    service, _, clock = _service()
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    item.category_id = "missing"
+
+    service.start(item.id)
+    clock.advance(120)
+    service.stop_running()
+
+    totals = service.category_today_all_totals(date(2026, 8, 30))
+
+    assert totals == [(None, 120)]
+
+
+def test_category_today_all_totals_excludes_records_from_other_days() -> None:
+    service, _, clock = _service()
+    work = service.add_category("仕事")
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item.id, work.id)
+
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+
+    totals = service.category_today_all_totals(date(2026, 8, 31))
+
+    assert totals == [(work, 0), (None, 0)]
+
+
+def test_category_today_item_totals_includes_due_items_without_records() -> None:
+    service, _, clock = _service()
+    work = service.add_category("仕事")
+    design = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    review = service.add_item("レビュー", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(design.id, work.id)
+    service.set_item_category(review.id, work.id)
+
+    service.start(design.id)
+    clock.advance(600)
+    service.stop_running()
+
+    totals = service.category_today_item_totals(date(2026, 8, 30))
+
+    assert totals == {work.id: [("設計", 600), ("レビュー", 0)]}
+
+
+def test_category_today_item_totals_appends_executed_items_not_due_today() -> None:
+    # 本日が実行対象外のアイテムでも、本日実行していれば対象アイテムの後ろに並ぶ
+    service, _, clock = _service()
+    work = service.add_category("仕事")
+    extra = service.add_item("臨時", ScheduleType.ONE_TIME, date(2026, 8, 29))
+    daily = service.add_item("日次", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(extra.id, work.id)
+    service.set_item_category(daily.id, work.id)
+
+    service.start(extra.id)
+    clock.advance(120)
+    service.start(daily.id)
+    clock.advance(60)
+    service.start(extra.id)
+    clock.advance(30)
+    service.stop_running()
+
+    totals = service.category_today_item_totals(date(2026, 8, 30))
+
+    assert totals == {work.id: [("日次", 60), ("臨時", 150)]}
+
+
+def test_category_today_item_totals_lists_deleted_item_records_as_uncategorized() -> None:
+    service, _, clock = _service()
+    work = service.add_category("仕事")
+    item = service.add_item("旧タスク", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item.id, work.id)
+
+    service.start(item.id)
+    clock.advance(90)
+    service.stop_running()
+    service.delete_item(item.id)
+
+    totals = service.category_today_item_totals(date(2026, 8, 30))
+
+    assert totals == {None: [("旧タスク", 90)]}
+
+
+def test_category_today_item_totals_excludes_records_from_other_days() -> None:
+    service, _, clock = _service()
+    item = service.add_item("臨時", ScheduleType.ONE_TIME, date(2026, 8, 30))
+
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+
+    totals = service.category_today_item_totals(date(2026, 8, 31))
+
+    assert totals == {}
