@@ -35,3 +35,29 @@ def format_estimate(estimate_hours: float) -> str:
     if hours:
         return f"{hours}時間"
     return f"{minutes}分"
+
+
+def format_gap(gap_seconds: float | None) -> str:
+    """見積りとのズレ(累積経過時間 - 見積り)を符号付きのHH:MM:SSにする。ズレが無ければ`-`。"""
+    if gap_seconds is None:
+        return "-"
+    rounded = round(gap_seconds)
+    if rounded == 0:
+        return format_duration(0)
+    return f"{'+' if rounded > 0 else '-'}{format_duration(abs(rounded))}"
+
+
+_GAP_OVER_RGB = "229, 57, 53"
+_GAP_UNDER_RGB = "30, 136, 229"
+_GAP_MIN_ALPHA = 0.08
+_GAP_ALPHA_RANGE = 0.52
+
+
+def gap_background(gap_seconds: float | None, estimate_seconds: float | None) -> str | None:
+    """GAPの背景色。超過は赤、余りは青で、見積りに対するズレの比率が大きいほど濃い(±100%で最大)。"""
+    if gap_seconds is None or not estimate_seconds or round(gap_seconds) == 0:
+        return None
+    ratio = min(abs(gap_seconds) / estimate_seconds, 1.0)
+    alpha = round(_GAP_MIN_ALPHA + _GAP_ALPHA_RANGE * ratio, 3)
+    rgb = _GAP_OVER_RGB if gap_seconds > 0 else _GAP_UNDER_RGB
+    return f"rgba({rgb}, {alpha})"
