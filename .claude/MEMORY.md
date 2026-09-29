@@ -1,6 +1,6 @@
 # 作業状況メモ
 
-最終更新: 2026-09-02(develop側のPRJコード機能・編集一覧フィルタと、feature/todo-app-mvp側の↑/↓・j/kキー選択切替+ショートカットキーのシステム警告音修正を`develop`へマージ)
+最終更新: 2026-09-30(実行履歴カレンダー機能を追加。FullCalendarのベンダリング・週開始曜日設定・土日/祝日の色分け・祝日データ取得・当日/週/月のビュー切替を実装。コミットは保留中)
 
 ## 現在のブランチ
 
@@ -183,6 +183,24 @@ src/todoapp/
 - 未追跡だった`.DS_Store`を`.gitignore`に追加(`82a3d21`)
 
 - `develop`側で先行していたPRJコード機能・編集一覧フィルタ(上記「四度目の再開分」まで)と、`feature/todo-app-mvp`側の↑/↓・j/kキー選択切替+ショートカットキーのシステム警告音修正が別々に進んでいたため、`develop`へ`feature/todo-app-mvp`を再マージ。競合したのは本ファイル(`.claude/MEMORY.md`、両ブランチのセッション記録が同じ節に追記されていたため)のみで、コード側(`category_list_dialog.py`・`list_view.py`)はPRJコード列/フィルタ機能行と`move_selection`追加が別箇所のため自動マージされた
+
+## 今回(2026-09-29〜09-30、実行履歴カレンダー機能の追加)の作業
+
+- ユーザー要望により、実行履歴を週次カレンダー表示できる機能を新規追加。NiceGUIには標準のカレンダー要素が無いため、公式リポジトリの`examples/fullcalendar/`(FullCalendarライブラリのVueラッパー)を`src/todoapp/ui/vendor/fullcalendar/`に無改変でベンダリングし(pipパッケージ化はされていないため)、`calendar_view.py`(新規)から利用する方式を採用。`main.py`に`CalendarView`を配線し、`Shift+L`キーでダイアログとして開く
+- 開いた直後だけ週7日分のうち1日分しか正しく描画されない不具合が繰り返し発生し、複数回の当てずっぽうなタイミング調整(requestAnimationFrame・ResizeObserver等)では再現性なく解消しなかった。ユーザーから「遅延を微調整という仕様でよいのか」との指摘を受け、方針を転換して`fullcalendar.js`に一時的な計測ログ(要素の幅・クラス名・経過時間等)を仕込み、実測データから原因を特定
+  - 真因は2つの独立した非同期処理の競合(レースコンディション): (1)FullCalendar本体(280KB)のロード完了と、(2)NiceGUIのダイアログ(Quasarの`QDialog`)を開いた際の表示アニメーション完了(祖先要素に`transform: scale(0)`相当の`q-dialog__inner--minimized`クラスが一時的に付与される)。カレンダーの構築をダイアログを開いた直後の`on_open`メソッドに一本化し、ライブラリのロード完了と、ダイアログの`transitionend`(アニメーション完了、保険として500msのタイムアウトも用意)の両方を確実に待ってから構築するよう修正して解消した
+  - 教訓は`.claude/memory`(auto-memory)の`diagnose-before-guessing-timing-fixes.md`に記録済み
+- ダイアログ幅を当初`w-[56rem]`にしていたが、ネイティブウィンドウ(`window_size=(620, 720)`)に対して大きすぎ列が見切れる不具合が発生。他のダイアログと同程度の`w-[36rem]`に修正
+- 曜日ヘッダーの折り返しが列ごとに不揃いだったため、`.fc-col-header-cell-cushion`に`white-space: nowrap`を追加して統一
+- ユーザー要望により、週次カレンダーに「日曜始まり」「月曜始まり」を切り替えるトグルを追加。`config_repository.py`の`AppConfig`に`week_start`を追加し`~/.todoapp/config.json`に永続化。この際、既存の`_on_theme_change`がconfig全体を毎回新規生成して保存しており、他の設定を上書き消去してしまう潜在バグを発見・修正(共有の`config`オブジェクトを直接書き換える方式に変更)
+- ユーザー要望により、土曜を薄い青・日曜を薄いピンクの背景で表示(FullCalendar既定の`fc-day-sat`/`fc-day-sun`クラスを使ったCSS)
+- ユーザー要望により、内閣府配布の祝日CSV(`https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv`)から祝日情報を取得し薄い緑の背景(背景イベント)で表示する機能を追加(`holiday_repository.py`新規)。キャッシュ(`~/.todoapp/holidays.json`)が無い初回起動時のみ自動取得、以降はカレンダーダイアログのボタンで手動更新
+  - 実装当初`urllib`を使ったところ、この実行環境(uv管理のCPython)ではOSのCA証明書ストアを参照できずSSL証明書検証エラーが発生。`certifi`を明示指定して解消した後、ユーザーからの提案で`httpx`(証明書に`certifi`を既定で使う)に切り替え、手動のssl/certifi配線を削除してシンプルにした(`pyproject.toml`の依存も`httpx`に変更)
+- ユーザー要望により、祝日の日付にマウスオーバーすると祝日名をツールチップ表示。当初は日付ヘッダーへの常時テキスト追記だったが、フォントが小さく視認性が悪いとの指摘で撤回し、ホバー時のみのネイティブツールチップ(title属性)に変更
+- ユーザー要望により、カレンダーを`当日`/`週`/`月`の3形式で切り替えられるようFullCalendarのheaderToolbarにビュー切替ボタンを追加(`timeGridDay`/`timeGridWeek`/`dayGridMonth`)。月表示で日付をクリックするとその日の当日表示に切り替わる`navLinks`も有効化(クリックした日付が基準になるのが標準動作)
+- ユーザー要望により、カレンダー上のブロックはタスク名のみ表示(`displayEventTime: false`)とし、マウスオーバーで「開始/終了/経過時間」をツールチップ表示するよう変更(`format_duration`を再利用、カテゴリの色付けは変更せず維持)
+- ユーザー要望により、祝日名ツールチップの表示範囲を統一。当初は日付ヘッダーの文字部分のみに`title`を設定していたため、週表示・日表示では色付き列の大部分でホバーしても出ず月表示と不一致だった。FullCalendarが日付を表す全要素に付与する`data-date`属性を目印に、`datesSet`イベント発火のたびに一括で`title`を反映する方式に統一し、月表示と同じ体験になるよう修正
+- `pytest`(90件)・`mypy src test`とも問題なし。ユーザーが実機で各機能を確認済み。コミットは未実施(ユーザー指示により保留中)
 
 ## 未実施・今後の検討事項
 
