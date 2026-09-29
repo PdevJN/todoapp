@@ -172,6 +172,12 @@ class TodoService:
         estimate_seconds = item.estimate_hours * 3600
         return max(estimate_seconds - self.cumulative_seconds(item_id), 0.0)
 
+    def is_over_estimate(self, item_id: str) -> bool:
+        item = self._find_item(item_id)
+        # 見積りは10分=0.1666…時間のような小数で保存されるため、秒に丸めてから比べる
+        estimate_seconds = round(item.estimate_hours * 3600)
+        return estimate_seconds > 0 and self.cumulative_seconds(item_id) > estimate_seconds
+
     def remaining_hours(self, item_id: str) -> float:
         return self.remaining_seconds(item_id) / 3600
 

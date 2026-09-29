@@ -12,7 +12,7 @@ from todoapp.domain.models import ScheduleType, TodoItem, is_category_expired
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
-from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
+from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration, format_estimate
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 
 _THEME_ACTIVE_COLOR = "primary"
@@ -213,6 +213,14 @@ class MainView:
             return
         if self._elapsed_item_id == running.item_id:
             self._elapsed_label.set_text(format_duration(running.elapsed_seconds(datetime.now())))
+            self._apply_over_estimate_color(self._elapsed_label, running.item_id)
+
+    def _apply_over_estimate_color(self, label: ui.label, item_id: str) -> None:
+        # 累積経過時間が見積りを超えたら赤、それ以外は通常の強調色で表示する
+        if self._service.is_over_estimate(item_id):
+            label.classes(add="text-negative", remove="text-primary")
+        else:
+            label.classes(add="text-primary", remove="text-negative")
 
     def _update_running_indicator(self) -> None:
         assert self._running_indicator is not None
@@ -271,12 +279,16 @@ class MainView:
             if is_running:
                 assert running is not None
                 label = ui.label(format_duration(running.elapsed_seconds(datetime.now())))
-                label.classes("text-primary font-mono")
+                label.classes("font-mono")
+                self._apply_over_estimate_color(label, item.id)
                 self._elapsed_label = label
                 self._elapsed_item_id = item.id
             else:
                 total = self._service.today_total_seconds(item.id, today)
                 if total > 0:
-                    ui.label(f"本日合計 {format_duration(total)}").classes("text-gray-500 font-mono")
+                    over = self._service.is_over_estimate(item.id)
+                    ui.label(f"本日合計 {format_duration(total)}").classes(
+                        "font-mono " + ("text-negative" if over else "text-gray-500")
+                    )
             if item.estimate_hours > 0:
-                ui.label(f"見積り {item.estimate_hours}h").classes("text-gray-400 text-sm")
+                ui.label(f"見積り {format_estimate(item.estimate_hours)}").classes("text-gray-400 text-sm")
