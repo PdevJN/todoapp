@@ -10,6 +10,7 @@ from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
 from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.formatting import format_duration
+from todoapp.ui.js_handlers import CLIPBOARD_COPY_HANDLER
 
 _MODE_ORDER = "order"
 _MODE_CATEGORY = "category"
@@ -37,7 +38,11 @@ class LogView(DialogMixin):
                     _MODE_LABELS, value=self._mode, on_change=self._on_mode_change
                 ).props("dense")
             self.log_container = ui.column().classes("w-full gap-1")
-            ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
+            with ui.row().classes("w-full justify-end gap-2"):
+                self.copy_button = ui.button("経過時間をコピー", icon="content_copy").props("flat")
+                self.copy_button.on("click", self._on_copied, js_handler=CLIPBOARD_COPY_HANDLER)
+                self.copy_button.set_visibility(False)
+                ui.button("閉じる", on_click=self.dialog.close).props("flat")
         ui.timer(1.0, self._tick)
 
     def open(self) -> None:
@@ -57,6 +62,7 @@ class LogView(DialogMixin):
         if _signature(rows) != self._category_signature:
             self._render.refresh()
             return
+        self._update_copy_text(rows)
         for (total_label, item_labels), (_, seconds, items) in zip(self._category_time_labels, rows):
             total_label.set_text(format_duration(seconds))
             for item_label, (_, item_seconds) in zip(item_labels, items):
@@ -70,9 +76,21 @@ class LogView(DialogMixin):
             for category, seconds in self._service.category_today_all_totals(today)
         ]
 
+    def _update_copy_text(self, rows: list[_CategoryRow]) -> None:
+        text = category_durations_text([(category, seconds) for category, seconds, _ in rows])
+        self.copy_button.props["data-copy-text"] = text
+        self.copy_button.set_enabled(bool(text))
+
+    def _on_copied(self, e: GenericEventArguments) -> None:
+        if e.args:
+            ui.notify("経過時間をコピーしました", type="positive")
+        else:
+            ui.notify("クリップボードへのコピーに失敗しました", type="negative")
+
     def _on_mode_change(self, e: ValueChangeEventArguments[str]) -> None:
         # カテゴリ別表示では記録を選択できないため、切り替え時に記録の選択を解除する
         self._mode = e.value
+        self.copy_button.set_visibility(self._mode == _MODE_CATEGORY)
         self._state.select_records(set())
         self._state.select_record(None)
         self._select_anchor_index = None
@@ -132,6 +150,7 @@ class LogView(DialogMixin):
                 rows = self._category_rows()
                 self._category_signature = _signature(rows)
                 self._category_time_labels = [self._render_category_row(*row) for row in rows]
+                self._update_copy_text(rows)
                 return
             records = self._service.today_records(date.today())
             self._rendered_record_ids = [record.id for record in records]
@@ -180,6 +199,11 @@ class LogView(DialogMixin):
                         ui.label(f"・{name}")
                         item_labels.append(ui.label(format_duration(item_seconds)).classes("font-mono"))
         return total_label, item_labels
+
+
+def category_durations_text(totals: list[tuple[Category | None, float]]) -> str:
+    """登録済みカテゴリの経過時間を画面の並び順に1行ずつ並べる(未定は含めない)。"""
+    return "\n".join(format_duration(seconds) for category, seconds in totals if category is not None)
 
 
 def _signature(rows: list[_CategoryRow]) -> list[tuple[str | None, list[str]]]:
