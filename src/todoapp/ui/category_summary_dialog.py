@@ -13,6 +13,14 @@ from todoapp.ui.formatting import format_duration, format_gap, gap_background
 UNCATEGORIZED_COLOR = "#9e9e9e"
 _TAB_CATEGORY = "カテゴリ別"
 _TAB_ITEM = "アイテム別"
+# valueは秒。カテゴリ別は一覧と同じHH:MM:SSで表示する
+_CATEGORY_TOOLTIP_FORMATTER = (
+    "p => { const s = Math.round(p.value); const f = n => String(n).padStart(2, '0');"
+    " return `${p.name}  ${f(Math.floor(s / 3600))}:${f(Math.floor(s % 3600 / 60))}:${f(s % 60)}"
+    " (${p.percent}%)`; }"
+)
+# アイテム別は、Python側で整形済みの文字列(系列データのtooltip)に、|GAP|全体に対する割合を添える
+_GAP_TOOLTIP_FORMATTER = "p => `${p.data.tooltip} (${p.percent}%)`"
 _ITEM_ROW_CLASSES = "w-full items-center border-b py-1 px-1 no-wrap gap-1"
 _ITEM_NUMBER_CLASSES = "w-20 text-right font-mono px-1"
 
@@ -30,11 +38,38 @@ def pie_chart_data(totals: list[tuple[Category | None, float]]) -> list[dict[str
     ]
 
 
+def gap_pie_data(rows: list[ItemGapRow]) -> list[dict[str, Any]]:
+    """アイテムごとのGAPを円グラフの系列データにする。扇の大きさは|GAP|、色は表のGAPセルと同じ赤/青の濃淡。
+
+    GAPが無い(見積り未設定・削除済み)アイテムと、秒に丸めてGAPが0のアイテムは含めない。
+    """
+    data: list[dict[str, Any]] = []
+    for row in rows:
+        if row.gap_seconds is None or row.estimate_seconds is None or row.cumulative_seconds is None:
+            continue
+        color = gap_background(row.gap_seconds, row.estimate_seconds)
+        if color is None:
+            continue
+        data.append(
+            {
+                "name": row.name,
+                "value": abs(row.gap_seconds),
+                "itemStyle": {"color": color},
+                "tooltip": (
+                    f"{row.name}  GAP {format_gap(row.gap_seconds)}"
+                    f" (見積り {format_duration(row.estimate_seconds)} / 累積 {format_duration(row.cumulative_seconds)})"
+                ),
+            }
+        )
+    return data
+
+
 class CategorySummaryDialog(DialogMixin):
     def __init__(self, service: TodoService) -> None:
         self._service = service
         self._selected_key: str | None = None
-        self._pie_visible = False
+        # 円グラフの表示状態はタブごとに独立して持つ
+        self._pie_visible = {_TAB_CATEGORY: False, _TAB_ITEM: False}
 
     def build(self) -> None:
         # アイテム別タブは列が多いため、他のダイアログ(最大w-[36rem])と同程度の幅に広げる
@@ -49,20 +84,29 @@ class CategorySummaryDialog(DialogMixin):
                 self.item_tab = ui.tab(_TAB_ITEM)
             with ui.tab_panels(self.tabs, value=_TAB_CATEGORY).classes("w-full"):
                 with ui.tab_panel(self.category_tab).classes("p-0 gap-2"):
-                    self.pie_container = ui.column().classes("w-full items-center")
-                    with self.pie_container:
-                        self.pie_chart = ui.echart(_pie_options([])).classes("w-full h-64")
-                        self.pie_empty_label = ui.label("本日の記録はまだありません").classes("text-gray-400 italic")
+                    self.pie_container, self.pie_chart, self.pie_empty_label = self._build_pie(
+                        _CATEGORY_TOOLTIP_FORMATTER, "本日の記録はまだありません"
+                    )
                     self.category_container = ui.column().classes("w-full gap-1")
                     ui.separator()
                     ui.label("種別ごとの集計").classes("text-sm font-bold text-gray-600")
                     self.kind_container = ui.column().classes("w-full gap-1")
-                with ui.tab_panel(self.item_tab).classes("p-0"):
+                with ui.tab_panel(self.item_tab).classes("p-0 gap-2"):
+                    self.gap_pie_container, self.gap_pie_chart, self.gap_pie_empty_label = self._build_pie(
+                        _GAP_TOOLTIP_FORMATTER, "GAPのあるアイテムがありません"
+                    )
                     self.item_container = ui.column().classes("w-full gap-0")
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
 
+    def _build_pie(self, tooltip_formatter: str, empty_text: str) -> tuple[ui.column, ui.echart, ui.label]:
+        container = ui.column().classes("w-full items-center")
+        with container:
+            chart = ui.echart(_pie_options(tooltip_formatter)).classes("w-full h-64")
+            empty_label = ui.label(empty_text).classes("text-gray-400 italic")
+        return container, chart, empty_label
+
     def open(self) -> None:
-        self._pie_visible = False
+        self._pie_visible = {_TAB_CATEGORY: False, _TAB_ITEM: False}
         self.tabs.set_value(_TAB_CATEGORY)
         self.refresh()
         self.dialog.open()
@@ -94,10 +138,10 @@ class CategorySummaryDialog(DialogMixin):
                 ui.label(f"{kind}: {format_duration(kind_totals[kind])}").classes("font-mono text-right w-full")
 
     def _on_tab_change(self) -> None:
-        # 円グラフはカテゴリ別タブのものなので、アイテム別タブではボタンを隠す
-        self.pie_button.set_visibility(self.tabs.value == _TAB_CATEGORY)
+        self._apply_pie_visibility()
 
     def _refresh_items(self, rows: list[ItemGapRow]) -> None:
+        self._update_pie(self.gap_pie_chart, self.gap_pie_empty_label, gap_pie_data(rows))
         self.item_container.clear()
         with self.item_container:
             if not rows:
@@ -125,19 +169,27 @@ class CategorySummaryDialog(DialogMixin):
                 gap_label.style(f"background: {background}")
 
     def _toggle_pie(self) -> None:
-        self._pie_visible = not self._pie_visible
+        tab = self.tabs.value
+        self._pie_visible[tab] = not self._pie_visible[tab]
         self._apply_pie_visibility()
 
     def _apply_pie_visibility(self) -> None:
-        self.pie_container.set_visibility(self._pie_visible)
-        self.pie_button.props(f"color={'primary' if self._pie_visible else 'grey'}")
+        self.pie_container.set_visibility(self._pie_visible[_TAB_CATEGORY])
+        self.gap_pie_container.set_visibility(self._pie_visible[_TAB_ITEM])
+        # 表示中の円グラフは、選択中と分かるよう表示中のタブでのボタンの色を変える
+        self.pie_button.props(f"color={'primary' if self._pie_visible[self.tabs.value] else 'grey'}")
+
+    @staticmethod
+    def _update_pie(
+        chart: ui.echart, empty_label: ui.label, data: list[dict[str, Any]]
+    ) -> None:
+        chart.options["series"][0]["data"] = data
+        chart.update()
+        chart.set_visibility(bool(data))
+        empty_label.set_visibility(not data)
 
     def _refresh_pie(self, totals: list[tuple[Category | None, float]]) -> None:
-        data = pie_chart_data(totals)
-        self.pie_chart.options["series"][0]["data"] = data
-        self.pie_chart.update()
-        self.pie_chart.set_visibility(bool(data))
-        self.pie_empty_label.set_visibility(not data)
+        self._update_pie(self.pie_chart, self.pie_empty_label, pie_chart_data(totals))
         self._apply_pie_visibility()
 
     def _select(self, key: str) -> None:
@@ -164,16 +216,15 @@ def _format_optional(seconds: float | None) -> str:
     return format_duration(seconds) if seconds is not None else "-"
 
 
-def _pie_options(data: list[dict[str, Any]]) -> dict[str, Any]:
+def _pie_options(tooltip_formatter: str) -> dict[str, Any]:
     return {
         "tooltip": {
             "trigger": "item",
-            # valueは秒。一覧と同じHH:MM:SSで表示する
-            ":formatter": (
-                "p => { const s = Math.round(p.value); const f = n => String(n).padStart(2, '0');"
-                " return `${p.name}  ${f(Math.floor(s / 3600))}:${f(Math.floor(s % 3600 / 60))}:${f(s % 60)}"
-                " (${p.percent}%)`; }"
-            ),
+            ":formatter": tooltip_formatter,
+            # 端に近い扇でもツールチップが円グラフの領域(ダイアログ内)からはみ出さないよう内側へ寄せ、
+            # 長い文字列(アイテム別のGAPなど)は幅に収まるよう折り返す
+            "confine": True,
+            "extraCssText": "max-width: 90%; white-space: normal; word-break: break-all;",
         },
         "series": [
             {
@@ -181,7 +232,7 @@ def _pie_options(data: list[dict[str, Any]]) -> dict[str, Any]:
                 "radius": ["35%", "65%"],
                 # 文字色はテーマに関わらず読めるよう、各扇の色に合わせる
                 "label": {"color": "inherit"},
-                "data": data,
+                "data": [],
             }
         ],
     }
