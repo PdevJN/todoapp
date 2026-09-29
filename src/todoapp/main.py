@@ -31,6 +31,7 @@ from todoapp.ui.list_view import ListView
 from todoapp.ui.log_view import LogView
 from todoapp.ui.main_view import MainView
 from todoapp.ui.record_edit_dialog import RecordEditDialog
+from todoapp.ui.record_timeline_dialog import RecordTimelineDialog
 
 
 @ui.page("/")
@@ -193,7 +194,8 @@ def build_app() -> None:
     )
     list_view = ListView(service, state)
     edit_dialog = EditDialog(service, refresh_all=refresh_all)
-    log_view = LogView(service, state)
+    record_timeline_dialog = RecordTimelineDialog(service, refresh_all=refresh_all)
+    log_view = LogView(service, state, open_timeline_edit=record_timeline_dialog.open_for)
     record_edit_dialog = RecordEditDialog(service, refresh_all=refresh_all)
     calendar_view = CalendarView(
         service,
@@ -209,6 +211,7 @@ def build_app() -> None:
     edit_dialog.build()
     log_view.build()
     record_edit_dialog.build()
+    record_timeline_dialog.build()
     calendar_view.build()
     category_list_dialog.build()
     category_edit_dialog.build()
@@ -225,6 +228,7 @@ def build_app() -> None:
         edit_dialog,
         log_view,
         record_edit_dialog,
+        record_timeline_dialog,
         calendar_view,
         category_list_dialog,
         category_edit_dialog,
