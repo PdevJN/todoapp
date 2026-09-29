@@ -603,3 +603,63 @@ def test_category_today_totals_excludes_records_from_other_days() -> None:
     totals = service.category_today_totals(date(2026, 8, 30))
 
     assert totals == {category.id: 120}
+
+
+def test_category_today_all_totals_includes_categories_without_records() -> None:
+    service, _, clock = _service()
+    work = service.add_category("仕事")
+    sales = service.add_category("営業")
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item.id, work.id)
+
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+
+    totals = service.category_today_all_totals(date(2026, 8, 30))
+
+    assert totals == [(work, 600), (sales, 0), (None, 0)]
+
+
+def test_category_today_all_totals_puts_uncategorized_last() -> None:
+    service, _, clock = _service()
+    work = service.add_category("仕事")
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+
+    service.start(item.id)
+    clock.advance(300)
+    service.stop_running()
+
+    totals = service.category_today_all_totals(date(2026, 8, 30))
+
+    assert totals == [(work, 0), (None, 300)]
+
+
+def test_category_today_all_totals_counts_unknown_category_as_uncategorized() -> None:
+    # 存在しないカテゴリIDを持つアイテムの記録は「未定」に合算する
+    service, _, clock = _service()
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    item.category_id = "missing"
+
+    service.start(item.id)
+    clock.advance(120)
+    service.stop_running()
+
+    totals = service.category_today_all_totals(date(2026, 8, 30))
+
+    assert totals == [(None, 120)]
+
+
+def test_category_today_all_totals_excludes_records_from_other_days() -> None:
+    service, _, clock = _service()
+    work = service.add_category("仕事")
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item.id, work.id)
+
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+
+    totals = service.category_today_all_totals(date(2026, 8, 31))
+
+    assert totals == [(work, 0), (None, 0)]

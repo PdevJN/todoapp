@@ -82,6 +82,7 @@ def build_app() -> None:
         """
         body.body--dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.28) !important; }
         body.body--dark .bg-blue-200 { background-color: rgba(59, 130, 246, 0.4) !important; }
+        body.body--dark .bg-gray-100 { background-color: rgba(161, 161, 170, 0.2) !important; }
         body.body--dark .text-gray-400,
         body.body--dark .text-gray-500,
         body.body--dark .text-gray-600 { color: #a1a1aa !important; }

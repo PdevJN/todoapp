@@ -252,6 +252,20 @@ class TodoService:
             totals[category_id] = totals.get(category_id, 0.0) + record.elapsed_seconds(now)
         return totals
 
+    def category_today_all_totals(self, today: date) -> list[tuple[Category | None, float]]:
+        # 登録済みの全カテゴリを登録順に並べ、最後に「未定」(None)を置く
+        totals = self.category_today_totals(today)
+        result: list[tuple[Category | None, float]] = []
+        uncategorized = 0.0
+        known_ids = {category.id for category in self._data.categories}
+        for category in self._data.categories:
+            result.append((category, totals.get(category.id, 0.0)))
+        for category_id, seconds in totals.items():
+            if category_id not in known_ids:
+                uncategorized += seconds
+        result.append((None, uncategorized))
+        return result
+
     def kind_today_totals(self, today: date) -> dict[str, float]:
         categories_by_id = {category.id: category for category in self._data.categories}
         totals: dict[str, float] = {}

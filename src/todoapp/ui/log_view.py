@@ -3,13 +3,17 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from nicegui import ui
-from nicegui.events import GenericEventArguments
+from nicegui.events import GenericEventArguments, ValueChangeEventArguments
 
-from todoapp.domain.models import ExecutionRecord
+from todoapp.domain.models import Category, ExecutionRecord
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
 from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.formatting import format_duration
+
+_MODE_ORDER = "order"
+_MODE_CATEGORY = "category"
+_MODE_LABELS = {_MODE_ORDER: "実行順", _MODE_CATEGORY: "カテゴリ別"}
 
 
 class LogView(DialogMixin):
@@ -18,21 +22,44 @@ class LogView(DialogMixin):
         self._state = state
         self._rendered_record_ids: list[str] = []
         self._select_anchor_index: int | None = None
+        self._mode = _MODE_ORDER
 
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[32rem] gap-2"):
-            ui.label("本日の作業ログ").classes("text-lg font-bold")
+            with ui.row().classes("w-full items-center justify-between"):
+                ui.label("本日の作業ログ").classes("text-lg font-bold")
+                self.mode_toggle = ui.toggle(
+                    _MODE_LABELS, value=self._mode, on_change=self._on_mode_change
+                ).props("dense")
             self.log_container = ui.column().classes("w-full gap-1")
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
+        ui.timer(1.0, self._tick)
 
     def open(self) -> None:
+        self._mode = _MODE_ORDER
+        self.mode_toggle.set_value(_MODE_ORDER)
         self._render()
         self.dialog.open()
 
     def refresh(self) -> None:
         self._render.refresh()
 
+    def _tick(self) -> None:
+        # カテゴリ別の行は操作を受けないため、実行中は毎秒再描画して合計時間を進める
+        if self.is_open() and self._mode == _MODE_CATEGORY and self._service.running_record() is not None:
+            self._render.refresh()
+
+    def _on_mode_change(self, e: ValueChangeEventArguments[str]) -> None:
+        # カテゴリ別表示では記録を選択できないため、切り替え時に記録の選択を解除する
+        self._mode = e.value
+        self._state.select_records(set())
+        self._state.select_record(None)
+        self._select_anchor_index = None
+        self._render.refresh()
+
     def select_all(self) -> None:
+        if self._mode != _MODE_ORDER:
+            return
         self._state.select_records(set(self._rendered_record_ids))
         self._render.refresh()
 
@@ -61,7 +88,7 @@ class LogView(DialogMixin):
         self._render.refresh()
 
     def move_selection(self, delta: int) -> None:
-        if not self._rendered_record_ids:
+        if self._mode != _MODE_ORDER or not self._rendered_record_ids:
             return
         current = self._state.selected_record_id
         if current in self._rendered_record_ids:
@@ -79,6 +106,11 @@ class LogView(DialogMixin):
     def _render(self) -> None:
         self.log_container.clear()
         with self.log_container:
+            if self._mode == _MODE_CATEGORY:
+                self._rendered_record_ids = []
+                for category, seconds in self._service.category_today_all_totals(date.today()):
+                    self._render_category_row(category, seconds)
+                return
             records = self._service.today_records(date.today())
             self._rendered_record_ids = [record.id for record in records]
             if not records:
@@ -103,3 +135,15 @@ class LogView(DialogMixin):
             )
             ui.label(record.item_name).classes("font-medium")
             ui.label(f"{start} - {end} ({elapsed})").classes("text-gray-500 font-mono")
+
+    def _render_category_row(self, category: Category | None, seconds: float) -> None:
+        classes = "w-full justify-between items-center border-b py-1 px-1 rounded"
+        with ui.row().classes(classes + (" bg-gray-100" if category is None else "")):
+            with ui.row().classes("items-center gap-1"):
+                if category is None:
+                    ui.label("未定").classes("font-medium text-gray-500")
+                else:
+                    ui.label(category.name).classes("font-medium")
+                    if category.prj_code:
+                        ui.badge(category.prj_code).props("outline")
+            ui.label(format_duration(seconds)).classes("text-gray-500 font-mono")
