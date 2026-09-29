@@ -2,6 +2,8 @@ from todoapp.ui.formatting import (
     estimate_to_hours_minutes,
     format_duration,
     format_estimate,
+    format_gap,
+    gap_background,
     hours_minutes_to_estimate,
 )
 
@@ -76,3 +78,40 @@ def test_format_estimate_shapes() -> None:
     assert format_estimate(1.5) == "1時間30分"
     assert format_estimate(0.75) == "45分"
     assert format_estimate(2.0) == "2時間"
+
+
+def test_format_gap_shows_sign_for_overrun_and_surplus() -> None:
+    assert format_gap(1800) == "+00:30:00"
+    assert format_gap(-1200) == "-00:20:00"
+
+
+def test_format_gap_is_unsigned_at_zero() -> None:
+    assert format_gap(0) == "00:00:00"
+    assert format_gap(0.4) == "00:00:00"
+
+
+def test_format_gap_is_dash_without_gap() -> None:
+    assert format_gap(None) == "-"
+
+
+def test_gap_background_is_none_without_estimate_or_gap() -> None:
+    assert gap_background(None, None) is None
+    assert gap_background(600, None) is None
+    assert gap_background(None, 3600) is None
+
+
+def test_gap_background_is_none_at_zero_gap() -> None:
+    assert gap_background(0, 3600) is None
+    assert gap_background(0.4, 3600) is None
+
+
+def test_gap_background_is_red_for_overrun_and_blue_for_surplus() -> None:
+    assert gap_background(1800, 3600) == "rgba(229, 57, 53, 0.34)"
+    assert gap_background(-1800, 3600) == "rgba(30, 136, 229, 0.34)"
+
+
+def test_gap_background_gets_darker_as_ratio_grows_and_caps_at_full_ratio() -> None:
+    assert gap_background(360, 3600) == "rgba(229, 57, 53, 0.132)"
+    assert gap_background(3600, 3600) == "rgba(229, 57, 53, 0.6)"
+    assert gap_background(7200, 3600) == "rgba(229, 57, 53, 0.6)"
+    assert gap_background(-7200, 3600) == "rgba(30, 136, 229, 0.6)"

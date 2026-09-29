@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from todoapp.domain.models import AppData, ScheduleType
-from todoapp.domain.service import TodoService
+from todoapp.domain.service import ItemGapRow, TodoService
 
 
 class FakeRepository:
@@ -773,3 +773,93 @@ def test_is_over_estimate_counts_records_from_previous_days() -> None:
     service.stop_running()
 
     assert service.is_over_estimate(item.id) is True
+
+
+def test_item_gap_rows_reports_overrun_against_cumulative_estimate() -> None:
+    service, _, clock = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=1.0)
+
+    service.start(item.id)
+    clock.advance(4500)
+    service.stop_running()
+
+    rows = service.item_gap_rows(date(2026, 8, 30))
+
+    assert rows == [ItemGapRow("設計", 4500, 4500, 3600, 900)]
+
+
+def test_item_gap_rows_reports_negative_gap_when_under_estimate() -> None:
+    service, _, clock = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=1.0)
+
+    service.start(item.id)
+    clock.advance(2400)
+    service.stop_running()
+
+    rows = service.item_gap_rows(date(2026, 8, 30))
+
+    assert rows[0].gap_seconds == -1200
+
+
+def test_item_gap_rows_rounds_estimate_to_seconds() -> None:
+    service, _, _ = _service()
+    service.add_item("短い", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=10 / 60)
+
+    rows = service.item_gap_rows(date(2026, 8, 30))
+
+    assert rows[0].estimate_seconds == 600
+    assert rows[0].gap_seconds == -600
+
+
+def test_item_gap_rows_has_no_estimate_or_gap_without_estimate() -> None:
+    service, _, clock = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30))
+
+    service.start(item.id)
+    clock.advance(60)
+    service.stop_running()
+
+    assert service.item_gap_rows(date(2026, 8, 30)) == [ItemGapRow("散歩", 60, 60, None, None)]
+
+
+def test_item_gap_rows_cumulative_includes_other_days_but_today_does_not() -> None:
+    service, _, clock = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=1.0)
+
+    service.start(item.id)
+    clock.advance(1800)
+    service.stop_running()
+    clock.advance(86400)
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+
+    rows = service.item_gap_rows(date(2026, 8, 31))
+
+    assert rows == [ItemGapRow("設計", 600, 2400, 3600, -1200)]
+
+
+def test_item_gap_rows_lists_due_items_then_executed_items_not_due_today() -> None:
+    service, _, clock = _service()
+    extra = service.add_item("臨時", ScheduleType.ONE_TIME, date(2026, 8, 29))
+    service.add_item("日次", ScheduleType.DAILY, date(2026, 8, 30))
+
+    service.start(extra.id)
+    clock.advance(120)
+    service.stop_running()
+
+    rows = service.item_gap_rows(date(2026, 8, 30))
+
+    assert [(r.name, r.today_seconds) for r in rows] == [("日次", 0), ("臨時", 120)]
+
+
+def test_item_gap_rows_deleted_item_has_no_cumulative_estimate_or_gap() -> None:
+    service, _, clock = _service()
+    item = service.add_item("旧タスク", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=1.0)
+
+    service.start(item.id)
+    clock.advance(90)
+    service.stop_running()
+    service.delete_item(item.id)
+
+    assert service.item_gap_rows(date(2026, 8, 30)) == [ItemGapRow("旧タスク", 90, None, None, None)]

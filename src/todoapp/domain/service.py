@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from datetime import date, datetime
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from todoapp.domain.models import (
     AppData,
@@ -17,6 +17,16 @@ from todoapp.domain.models import (
 class TodoRepository(Protocol):
     def load(self) -> AppData: ...
     def save(self, data: AppData) -> None: ...
+
+
+class ItemGapRow(NamedTuple):
+    """アイテムごとの集計1行分。累積・見積り・GAPは、削除済みアイテムや見積り未設定の場合`None`。"""
+
+    name: str
+    today_seconds: float
+    cumulative_seconds: float | None
+    estimate_seconds: int | None
+    gap_seconds: float | None  # 累積経過時間 - 見積り(超過が正)
 
 
 class TodoService:
@@ -272,11 +282,9 @@ class TodoService:
         result.append((None, uncategorized))
         return result
 
-    def category_today_item_totals(self, today: date) -> dict[str | None, list[tuple[str, float]]]:
+    def _today_item_order(self, today: date) -> tuple[list[str], dict[str, float], dict[str, str]]:
         # 本日の実行対象アイテム(一覧順)の後ろに、対象外だが本日実行したアイテムを初回実行順に並べる
         now = self._clock()
-        known_ids = {category.id for category in self._data.categories}
-        items_by_id = {item.id: item for item in self._data.items}
         seconds_by_item: dict[str, float] = {}
         names: dict[str, str] = {}
         for record in self.today_records(today):
@@ -286,6 +294,12 @@ class TodoService:
 
         order = [item.id for item in self.items_due_today(today)]
         order += [item_id for item_id in seconds_by_item if item_id not in order]
+        return order, seconds_by_item, names
+
+    def category_today_item_totals(self, today: date) -> dict[str | None, list[tuple[str, float]]]:
+        known_ids = {category.id for category in self._data.categories}
+        items_by_id = {item.id: item for item in self._data.items}
+        order, seconds_by_item, names = self._today_item_order(today)
 
         result: dict[str | None, list[tuple[str, float]]] = {}
         for item_id in order:
@@ -295,6 +309,27 @@ class TodoService:
             name = item.name if item is not None else names[item_id]
             result.setdefault(key, []).append((name, seconds_by_item.get(item_id, 0.0)))
         return result
+
+    def item_gap_rows(self, today: date) -> list[ItemGapRow]:
+        """本日の対象または本日実行したアイテムごとに、実行時間と見積りとのズレ(GAP)を返す。"""
+        items_by_id = {item.id: item for item in self._data.items}
+        order, seconds_by_item, names = self._today_item_order(today)
+
+        rows: list[ItemGapRow] = []
+        for item_id in order:
+            item = items_by_id.get(item_id)
+            today_seconds = seconds_by_item.get(item_id, 0.0)
+            if item is None:
+                rows.append(ItemGapRow(names[item_id], today_seconds, None, None, None))
+                continue
+            cumulative = self.cumulative_seconds(item_id)
+            # 見積りは10分=0.1666…時間のような小数で保存されるため、秒に丸める
+            estimate = round(item.estimate_hours * 3600)
+            if estimate > 0:
+                rows.append(ItemGapRow(item.name, today_seconds, cumulative, estimate, cumulative - estimate))
+            else:
+                rows.append(ItemGapRow(item.name, today_seconds, cumulative, None, None))
+        return rows
 
     def kind_today_totals(self, today: date) -> dict[str, float]:
         categories_by_id = {category.id: category for category in self._data.categories}

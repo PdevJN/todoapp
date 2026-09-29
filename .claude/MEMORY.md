@@ -250,6 +250,17 @@ src/todoapp/
 - 系列データは`pie_chart_data()`(純粋関数、`test/ui/test_category_summary_dialog.py`でテスト)。カテゴリ色を使い、`未定`はグレー、0秒は除外。既存の`category_today_all_totals()`を利用し新しいドメイン関数は追加していない。ツールチップは`名前 HH:MM:SS (割合%)`(`:formatter`でJS関数を渡す)、ラベル文字色は`inherit`でテーマに依らず読めるようにした
 - `pytest`(131件)・`mypy src test`とも問題なし
 
+## 今回(2026-09-30、集計画面へのアイテム別GAP集計)の作業
+
+- `develop`から`feature/summary-item-gap`ブランチを作成して実施
+- **リネーム**: `Shift+T`の`カテゴリ別集計`ダイアログの名称を`集計画面`に変更(タイトル・`README.md`・ヘルプ・`CLAUDE.md`)。クラス名・ファイル名(`CategorySummaryDialog`・`category_summary_dialog.py`)は変更していない
+- **タブ化**: `カテゴリ別`(既存の円グラフ・カテゴリ一覧・種別ごとの集計)と`アイテム別`をタブで切り替え(ユーザーが選択)。開くたびに`カテゴリ別`から始め、円グラフのアイコンボタンは`カテゴリ別`タブの間だけ表示。列が増えるため幅を`w-[28rem]`から`w-[36rem]`に広げた
+- **GAP**: `累積経過時間 - 見積り`(全期間の累積、超過が`+`、余りが`-`。既存の残り時間・赤色表示と同じ基準でユーザーが選択)。見積り未設定・削除済みアイテムは累積・見積り・GAPが`-`。対象は本日の実行対象と本日実行したアイテム(カテゴリ行のツールチップと同じ範囲・並び)
+  - ドメインに`TodoService.item_gap_rows()`と`ItemGapRow`を追加。並び順の決定を`_today_item_order()`に切り出し`category_today_item_totals()`と共有。見積りは秒に丸めてから比較
+- **色の濃淡**(ユーザーが方針を選択): GAPセルの背景を、超過は赤`rgba(229, 57, 53, α)`・余りは青`rgba(30, 136, 229, α)`で表す。`α = 0.08 + 0.52 × min(|GAP| / 見積り, 1)`(±100%で最大0.6)、秒に丸めてGAPが0なら無色。`formatting.py`の`gap_background()`・`format_gap()`(純粋関数、テスト済み)
+- 途中の躓き: macOSのBSD `sed -i`は引数の書き方がGNUと異なりインポート修正が失敗したため、Pythonで書き換えた
+- `pytest`(145件)・`mypy src test`とも問題なし
+
 ## 未実施・今後の検討事項
 
 - `main`へのマージはまだ行っていない
