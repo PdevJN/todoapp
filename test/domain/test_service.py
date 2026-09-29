@@ -731,3 +731,45 @@ def test_category_today_item_totals_excludes_records_from_other_days() -> None:
     totals = service.category_today_item_totals(date(2026, 8, 31))
 
     assert totals == {}
+
+
+def test_is_over_estimate_is_false_without_estimate() -> None:
+    service, _, clock = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30))
+
+    service.start(item.id)
+    clock.advance(3600)
+    service.stop_running()
+
+    assert service.is_over_estimate(item.id) is False
+
+
+def test_is_over_estimate_boundary_at_estimate() -> None:
+    # 境界値分析: 見積りちょうどはまだ超過ではなく、1秒でも超えたら超過
+    service, _, clock = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=0.5)
+
+    service.start(item.id)
+    clock.advance(1800)
+    assert service.is_over_estimate(item.id) is False
+
+    clock.advance(1)
+    assert service.is_over_estimate(item.id) is True
+
+
+def test_is_over_estimate_counts_records_from_previous_days() -> None:
+    service, _, clock = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=1.0)
+
+    service.start(item.id)
+    clock.advance(2400)
+    service.stop_running()
+    yesterday_record = service.records[0]
+    yesterday_record.start_time = datetime(2026, 8, 29, 9, 0, 0)
+    yesterday_record.end_time = datetime(2026, 8, 29, 9, 40, 0)
+
+    service.start(item.id)
+    clock.advance(1500)
+    service.stop_running()
+
+    assert service.is_over_estimate(item.id) is True

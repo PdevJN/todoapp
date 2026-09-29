@@ -1,4 +1,9 @@
-from todoapp.ui.formatting import format_duration
+from todoapp.ui.formatting import (
+    estimate_to_hours_minutes,
+    format_duration,
+    format_estimate,
+    hours_minutes_to_estimate,
+)
 
 
 def test_format_duration_at_zero_boundary() -> None:
@@ -47,3 +52,27 @@ def test_format_duration_does_not_wrap_hours_beyond_two_digits() -> None:
 def test_format_duration_truncates_fractional_seconds() -> None:
     # 境界値分析: 60秒未満の小数(59.9)はintで切り捨てられ、1分に繰り上がらない
     assert format_duration(59.9) == "00:00:59"
+
+
+def test_estimate_to_hours_minutes_splits_fractional_hours() -> None:
+    assert estimate_to_hours_minutes(1.5) == (1, 30)
+
+
+def test_estimate_to_hours_minutes_rounds_to_nearest_minute() -> None:
+    # 10分(0.1666…時間)のように割り切れない値も分単位に戻る
+    assert estimate_to_hours_minutes(10 / 60) == (0, 10)
+
+
+def test_hours_minutes_to_estimate_accepts_fractional_hours() -> None:
+    assert hours_minutes_to_estimate(1.5, 15) == 1.75
+
+
+def test_hours_minutes_round_trip_keeps_minutes() -> None:
+    for hours, minutes in [(0, 0), (0, 10), (1, 59), (12, 1)]:
+        assert estimate_to_hours_minutes(hours_minutes_to_estimate(hours, minutes)) == (hours, minutes)
+
+
+def test_format_estimate_shapes() -> None:
+    assert format_estimate(1.5) == "1時間30分"
+    assert format_estimate(0.75) == "45分"
+    assert format_estimate(2.0) == "2時間"
