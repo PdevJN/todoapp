@@ -178,8 +178,17 @@ class LogView(DialogMixin):
                 lambda e, rid=record.id: self._on_row_click(rid, e),
                 args=["ctrlKey", "metaKey", "shiftKey"],
             )
-            ui.label(record.item_name).classes("font-medium")
-            with ui.row().classes("items-center gap-1 no-wrap"):
+            # アイテムに設定されたカテゴリをバッジで表示する(未設定・削除済みアイテムは未定)
+            category = self._service.category_for_item(record.item_id)
+            category_name = category.name if category is not None else "未定"
+            category_color = category.color if category is not None else "grey"
+            # 左側(バッジ+タスク名)だけを縮められるようにし、長いタスク名は「...」で省略して
+            # マウスオーバーで全文をツールチップ表示する(時刻・ボタン側は幅を固定して見切れを防ぐ)
+            with ui.row().classes("items-center gap-2 no-wrap min-w-0 flex-1"):
+                ui.badge(category_name).props(f"outline color={category_color}").classes("shrink-0")
+                with ui.label(record.item_name).classes("font-medium truncate min-w-0"):
+                    ui.tooltip(record.item_name)
+            with ui.row().classes("items-center gap-1 no-wrap shrink-0"):
                 ui.label(f"{start} - {end} ({elapsed})").classes("text-gray-500 font-mono")
                 # 実行中の記録は終了時刻が未確定のためカレンダーでは編集できない。
                 # 行クリック(選択)を発火させないよう、クリックの伝播を止める
