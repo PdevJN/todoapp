@@ -450,6 +450,35 @@ def test_edit_item_estimate_hours_can_be_reset_to_zero_boundary() -> None:
     assert item.estimate_hours == 0.0
 
 
+def test_edit_item_rename_updates_existing_records_of_the_item() -> None:
+    # リネームすると、そのアイテムの過去の実行記録(実行中を含む)の名前も新しい名前に揃う
+    service, repository, clock = _service()
+    item = service.add_item("旧名", ScheduleType.DAILY, date(2026, 8, 30))
+    other = service.add_item("別タスク", ScheduleType.DAILY, date(2026, 8, 30))
+    service.start(item.id)
+    clock.advance(60)
+    service.start(other.id)  # itemの記録は停止済み
+    clock.advance(60)
+    service.start(item.id)  # itemの実行中の記録
+
+    service.edit_item(item.id, name="新名")
+
+    names = [(r.item_id, r.item_name) for r in service.records]
+    assert names == [(item.id, "新名"), (other.id, "別タスク"), (item.id, "新名")]
+    assert repository.saved is not None
+    assert [r.item_name for r in repository.saved.records] == ["新名", "別タスク", "新名"]
+
+
+def test_edit_item_without_name_keeps_record_names() -> None:
+    service, _, _ = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, date(2026, 8, 30))
+    service.start(item.id)
+
+    service.edit_item(item.id, estimate_hours=1.0)
+
+    assert service.records[0].item_name == "散歩"
+
+
 def test_edit_item_unknown_id_raises_key_error() -> None:
     # 異常系(同値分析): 存在しないIDは全メソッド共通でKeyErrorとなる
     service, _, _ = _service()

@@ -105,6 +105,11 @@ class TodoService:
         item = self._find_item(item_id)
         if name is not None:
             item.name = name
+            # 実行記録は開始時点のアイテム名を保持しているため、リネーム後も同じタスクとして
+            # 見えるよう、このアイテムの既存の記録の名前も揃える
+            for record in self._data.records:
+                if record.item_id == item_id:
+                    record.item_name = name
         if schedule_type is not None:
             item.schedule_type = schedule_type
         if anchor_date is not None:
