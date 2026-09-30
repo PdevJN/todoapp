@@ -12,7 +12,11 @@ export default {
     // 即座に構築していたが、実際の構築はダイアログが開かれた時(on_open)に
     // 一本化する(詳細はon_openのコメントを参照)。ここではライブラリの
     // ロードだけ済ませておく
-    this._loaded = loadResource(window.path_prefix + `${this.resourcePath}/index.global.min.js`);
+    // 日本語localeはindex.global.min.jsが定義するFullCalendarグローバルに登録されるため、
+    // 本体の読み込み完了後に読み込む(optionsのlocale: "ja"で有効になる)
+    this._loaded = loadResource(window.path_prefix + `${this.resourcePath}/index.global.min.js`).then(() =>
+      loadResource(window.path_prefix + `${this.resourcePath}/ja.global.min.js`),
+    );
     this.options.eventClick = (info) => this.$emit("click", { info });
     // upstream(zauberzeug/nicegui examples/fullcalendar)には無い処理。祝日の日付に
     // マウスオーバーすると、ブラウザ既定のツールチップ(title属性)で祝日名を表示する。
