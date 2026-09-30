@@ -44,6 +44,8 @@ class RecordTimelineDialog(DialogMixin):
                 self._calendar = FullCalendar(
                     {
                         "initialView": "timeGridDay",
+                        # lib/ja.global.min.js(fullcalendar.jsで読み込み)の日本語locale
+                        "locale": "ja",
                         "headerToolbar": False,
                         "allDaySlot": False,
                         "displayEventTime": False,

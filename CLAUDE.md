@@ -116,6 +116,7 @@
 
 - キー操作を追加・変更するときは、`ui/keyboard.py`の`SHORTCUT_KEYS`にもそのキーを追加し、`ヘルプ`(`ui/help_dialog.py`)と`README.md`のキー一覧も更新すること。ネイティブウィンドウ(WKWebView)では、`SHORTCUT_KEYS`に無いキーを押すとシステム警告音が鳴る(`test/ui/test_keyboard.py`が登録漏れを検出する)
 - 完了かどうかの判定は`domain/models.py`の`is_done()`に集約する。メインパネルの絞り込み・`d`キー・取り消し線の表示はすべてこの判定を通すこと
+- 画面の言語は日本語で、`main.py`の`ui.run(language="ja")`でQuasar標準コンポーネント(日付・時刻ピッカー、テーブルの文言など)を日本語化している。FullCalendarを使う画面(実行履歴・実行記録の編集)では、optionsに`"locale": "ja"`を指定する(日本語localeは`ui/vendor/fullcalendar/lib/ja.global.min.js`を`fullcalendar.js`が読み込む)。FullCalendarを新たに使う場合も同様にすること
 - `ui/vendor/fullcalendar/`は、NiceGUI公式exampleを元に、ドラッグ&ドロップの通知(`on_change`)・祝日ツールチップ・密着ガイド線などを追加している
 
 ## 開発言語とライブラリ選定

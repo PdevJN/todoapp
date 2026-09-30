@@ -43,6 +43,9 @@ class CalendarView(DialogMixin):
         # 曜日+日付の文字列がぎりぎり収まる列とわずかに折り返される列が混在し
         # 見た目が揃わないため、常に1行で収まるよう固定する
         ui.add_css(".fc .fc-col-header-cell-cushion { white-space: nowrap; font-size: 0.75em; }")
+        # 日本語localeでは期間タイトル(例: 2026年9月27日～10月3日)が長くなり、狭い幅で
+        # 折り返すため、文字を小さくして1行に収める
+        ui.add_css(".fc .fc-toolbar-title { white-space: nowrap; font-size: 1.05em; }")
         # 土曜・日曜の列(ヘッダー・時間帯グリッドとも)を色分けする。FullCalendarは
         # 曜日ごとにfc-day-sat/fc-day-sunクラスを自動付与するため、それを利用する。
         # ただし当日がその曜日の場合はFullCalendar既定の「本日」強調(黄色)を優先させる
@@ -75,6 +78,8 @@ class CalendarView(DialogMixin):
                 self._calendar = FullCalendar(
                     {
                         "initialView": "timeGridWeek",
+                        # lib/ja.global.min.js(fullcalendar.jsで読み込み)の日本語locale
+                        "locale": "ja",
                         "headerToolbar": {
                             "left": "title",
                             "right": "timeGridDay,timeGridWeek,dayGridMonth prev,next today",
