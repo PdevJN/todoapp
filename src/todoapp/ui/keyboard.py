@@ -152,11 +152,11 @@ class KeyboardController:
                 self._open_category_edit_dialog(self._state.selected_category_id)
             elif self._is_log_open() and self._state.selected_record_id is not None:
                 self._open_record_edit_dialog(self._state.selected_record_id)
-            elif item_id is not None:
+            elif item_id is not None and not self._is_dialog_open():
                 self._open_edit_dialog(item_id)
         elif e.key == "d" and not self._is_dialog_open():
             self._toggle_done_selected_items()
-        elif e.key == "c" and item_id is not None:
+        elif e.key == "c" and item_id is not None and not self._is_dialog_open():
             self._service.cancel_running(item_id)
             self._refresh_all()
         elif e.key == "l":
