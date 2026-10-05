@@ -35,8 +35,10 @@ class CategoryPickDialog(DialogMixin):
             if not self._service.categories:
                 ui.label("カテゴリがまだありません").classes("text-gray-400 italic")
             for category in self._service.categories:
-                badge = ui.badge(category.name).props(f"outline color={category.color}").classes("cursor-pointer")
-                badge.on("click", lambda cid=category.id: self._assign(cid))
+                row = ui.label(category.name).classes(
+                    f"w-full px-3 py-1 rounded cursor-pointer text-white bg-{category.color}"
+                )
+                row.on("click", lambda cid=category.id: self._assign(cid))
 
     def _assign(self, category_id: str | None) -> None:
         if self._item_id is None:
