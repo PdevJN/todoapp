@@ -16,8 +16,8 @@ from todoapp.ui.formatting import SCHEDULE_LABELS, estimate_to_hours_minutes, ho
 _CATEGORY_LABEL_SEP = "\x1f"
 
 
-def _category_label(name: str, prj_code: str = "", kind: str = "") -> str:
-    return f"{name}{_CATEGORY_LABEL_SEP}{prj_code}{_CATEGORY_LABEL_SEP}{kind}"
+def _category_label(name: str, prj_code: str = "", kind: str = "", color: str = "grey") -> str:
+    return f"{name}{_CATEGORY_LABEL_SEP}{prj_code}{_CATEGORY_LABEL_SEP}{kind}{_CATEGORY_LABEL_SEP}{color}"
 
 
 class EditDialog(DialogMixin):
@@ -49,14 +49,14 @@ class EditDialog(DialogMixin):
             self._category_select.add_slot(
                 "option",
                 r"""
-                <q-item v-bind="props.itemProps">
+                <q-item v-bind="props.itemProps" :class="'bg-' + props.opt.label.split('\u001f')[3] + ' text-white'">
                     <q-item-section>
                         <div class="row items-center q-gutter-x-sm">
                             <span>{{ props.opt.label.split('\u001f')[0] }}</span>
-                            <q-badge v-if="props.opt.label.split('\u001f')[1]" outline>
+                            <q-badge v-if="props.opt.label.split('\u001f')[1]" outline color="white">
                                 {{ props.opt.label.split('\u001f')[1] }}
                             </q-badge>
-                            <q-badge v-if="props.opt.label.split('\u001f')[2]" outline>
+                            <q-badge v-if="props.opt.label.split('\u001f')[2]" outline color="white">
                                 {{ props.opt.label.split('\u001f')[2] }}
                             </q-badge>
                         </div>
@@ -66,7 +66,7 @@ class EditDialog(DialogMixin):
             )
             self._category_select.add_slot(
                 "selected-item",
-                r"""<span>{{ props.opt.label.split('\u001f')[0] }}</span>""",
+                r"""<q-badge :color="props.opt.label.split('\u001f')[3]">{{ props.opt.label.split('\u001f')[0] }}</q-badge>""",
             )
             with ui.row().classes("w-full justify-between mt-2"):
                 ui.button("削除", on_click=self._delete).props("flat color=negative")
@@ -87,7 +87,7 @@ class EditDialog(DialogMixin):
         self._estimate_minutes_input.value = minutes
         category_options: dict[str | None, str] = {None: _category_label("未定")}
         category_options.update(
-            {c.id: _category_label(c.name, c.prj_code, c.kind) for c in self._service.categories}
+            {c.id: _category_label(c.name, c.prj_code, c.kind, c.color) for c in self._service.categories}
         )
         self._category_select.set_options(category_options, value=item.category_id)
         self._update_anchor_visibility()
