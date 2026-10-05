@@ -291,6 +291,16 @@ src/todoapp/
 - **`docs/development.md`**: モジュール構成を現状に更新(`domain/record_layout.py`・`ui/record_timeline_dialog.py`・`js_handlers.py`・`dialog_base.py`の追加、FullCalendarを「無改変」としていた誤りの訂正、集計画面・完了状態の絞り込みの説明)、テストの配置方針、`todos.json`に完了日を含むこと、`キー操作を追加するとき`の手順を追記
 - 親ディレクトリの`/Users/jun/Documents/opt/work/CLAUDE.md`は、リポジトリの外にある古いコピー(カテゴリ機能以降の記述が無い)で、今回は更新していない
 
+## 今回(2026-10-03、日本語IME使用時のmacOS警告ログの抑制)の作業
+
+- 日本語入力まわりを調査: 新規アイテム・カテゴリ一覧の入力欄のEnter登録は、すでに`IME_SAFE_ENTER_HANDLER`でIME確定のEnterを除外済み(今回変更なし)
+- ユーザー報告: IME使用時にmacOS(AppKit)が出す次の警告がコンソールに表示される。アプリの動作には影響しない無害なNSLog
+  - `Text input context does not respond to _valueForTIProperty`
+  - `_TIPropertyValueIsValid called with 4 on nil context!`
+  - `imkxpc_getApplicationProperty:reply: called with incorrect property value 4, bailing.`
+- 対応: `src/todoapp/stderr_filter.py`を追加。`main()`の`ui.run`の前に`install_stderr_filter()`でfd 2をパイプに差し替え、上記3種を含む行だけを捨てて元のstderrへ流す(WKWebViewを持つ子プロセスにも継承される)。`test/test_stderr_filter.py`で検証(pytest 171件・mypy通過)
+- ユーザーが実機で起動して確認中。**コミットは未実施**(要ユーザー確認)
+
 ## 未実施・今後の検討事項
 
 - `main`へのマージはまだ行っていない

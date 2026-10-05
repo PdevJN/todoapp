@@ -10,6 +10,7 @@ from todoapp.domain.models import is_category_expired, is_done
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
+from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 
 COLUMNS = [
     {"name": "name", "label": "アイテム名", "field": "name", "align": "left"},
@@ -24,6 +25,8 @@ class ListView:
         self._service = service
         self._state = state
         self._rendered_ids: list[str] = []
+        # 入力途中の文字では絞り込まず、Enter・フォーカス移動で確定した値だけを使う
+        self._applied_name_filter = ""
 
     def build(self) -> ui.column:
         root = ui.column().classes("w-full gap-2 p-4")
@@ -31,7 +34,8 @@ class ListView:
             ui.label("編集一覧").classes("text-lg font-bold")
             with ui.row().classes("w-full gap-2 items-end"):
                 self._name_filter = ui.input(label="アイテム名で絞り込み").classes("flex-grow")
-                self._name_filter.on_value_change(self.render.refresh)
+                self._name_filter.on("keydown.enter", self._apply_name_filter, js_handler=IME_SAFE_ENTER_HANDLER)
+                self._name_filter.on("blur", self._apply_name_filter)
                 self._schedule_filter = ui.select(
                     SCHEDULE_LABELS, label="実行の曜日", multiple=True
                 ).classes("w-48")
@@ -68,6 +72,12 @@ class ListView:
             self.render()
         ui.timer(1.0, self._tick)
         return root
+
+    def _apply_name_filter(self) -> None:
+        value = (self._name_filter.value or "").strip()
+        if value != self._applied_name_filter:
+            self._applied_name_filter = value
+            self.render.refresh()
 
     def _on_select(self, e: TableSelectionEventArguments) -> None:
         self._state.select_items({row["id"] for row in e.selection})
@@ -114,7 +124,7 @@ class ListView:
     @ui.refreshable_method
     def render(self) -> None:
         today = date.today()
-        name_filter = self._name_filter.value.strip()
+        name_filter = self._applied_name_filter
         schedule_filter = set(self._schedule_filter.value or [])
         anchor_filter_value = self._anchor_filter.value
         anchor_filter = date.fromisoformat(anchor_filter_value) if anchor_filter_value else None

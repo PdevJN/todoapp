@@ -17,6 +17,7 @@ from todoapp.repository.config_repository import (
 )
 from todoapp.repository.holiday_repository import HolidayRepository, fetch_holiday_csv, parse_holiday_csv
 from todoapp.repository.json_repository import JsonTodoRepository
+from todoapp.stderr_filter import install_stderr_filter
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.calendar_view import CalendarView
 from todoapp.ui.category_edit_dialog import CategoryEditDialog
@@ -287,6 +288,7 @@ def build_app() -> None:
 
 
 def main() -> None:
+    install_stderr_filter()
     ui.run(native=True, window_size=(620, 720), title="TODO", language="ja", reload=False)
 
 
