@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from todoapp.ui.app_state import AppState, Screen
 
 
@@ -63,3 +65,26 @@ def test_toggle_screen_switches_from_list_back_to_main() -> None:
     state = AppState(screen=Screen.LIST)
     state.toggle_screen()
     assert state.screen is Screen.MAIN
+
+
+def test_view_date_starts_today_and_is_not_read_only() -> None:
+    state = AppState()
+    assert state.view_date == date.today()
+    assert state.is_read_only_view is False
+
+
+def test_view_date_other_than_today_is_read_only_on_main_screen_only() -> None:
+    state = AppState()
+    state.view_date = date.today() + timedelta(days=1)
+    assert state.is_read_only_view is True
+    # 表示日はメインパネルだけの設定で、編集一覧では実行・完了の操作を妨げない
+    state.screen = Screen.LIST
+    assert state.is_read_only_view is False
+
+
+def test_shift_view_date_moves_by_days_in_both_directions() -> None:
+    state = AppState()
+    state.shift_view_date(1)
+    assert state.view_date == date.today() + timedelta(days=1)
+    state.shift_view_date(-2)
+    assert state.view_date == date.today() - timedelta(days=1)

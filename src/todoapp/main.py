@@ -273,6 +273,7 @@ def build_app() -> None:
         open_category_edit_dialog=category_edit_dialog.open_for,
         open_category_summary=category_summary_dialog.open,
         open_settings=settings_dialog.open,
+        shift_view_date=main_view.shift_view_date,
         toggle_done_selected_items=toggle_done_selected_items,
         delete_selected_items=delete_selected_items,
         delete_selected_records=delete_selected_records,
