@@ -1,10 +1,12 @@
 # 作業状況メモ
 
-最終更新: 2026-09-30(実行履歴カレンダー機能を追加。FullCalendarのベンダリング・週開始曜日設定・土日/祝日の色分け・祝日データ取得・当日/週/月のビュー切替を実装。`feature/execution-calendar`ブランチにコミット済み`7b3107e`)
+最終更新: 2026-10-07(v0.2.0を`main`へリリースし、タグ`v0.2.0`をプッシュ済み。カテゴリ選択の色付け(PR #3)・ダイアログ表示中のe/cキー修正(PR #4)を出した。新規アイテム名の入力補完を検討中で`feature/item-name-autocomplete`ブランチを切った)
 
 ## 現在のブランチ
 
-`develop`(`feature/todo-app-mvp`は`9ead194`で一度`develop`へマージ済みだったが、その後両ブランチが個別に進んだため、今回`feature/todo-app-mvp`の↑/↓・j/kキー選択切替とシステム警告音修正を`develop`へ再マージした)
+`feature/item-name-autocomplete`(`develop`から作成。新規アイテム名の入力補完を実装予定)。
+
+旧メモ: `develop`(`feature/todo-app-mvp`は`9ead194`で一度`develop`へマージ済みだったが、その後両ブランチが個別に進んだため、今回`feature/todo-app-mvp`の↑/↓・j/kキー選択切替とシステム警告音修正を`develop`へ再マージした)
 
 ## これまでの作業
 
@@ -299,7 +301,16 @@ src/todoapp/
   - `_TIPropertyValueIsValid called with 4 on nil context!`
   - `imkxpc_getApplicationProperty:reply: called with incorrect property value 4, bailing.`
 - 対応: `src/todoapp/stderr_filter.py`を追加。`main()`の`ui.run`の前に`install_stderr_filter()`でfd 2をパイプに差し替え、上記3種を含む行だけを捨てて元のstderrへ流す(WKWebViewを持つ子プロセスにも継承される)。`test/test_stderr_filter.py`で検証(pytest 171件・mypy通過)
-- ユーザーが実機で起動して確認中。**コミットは未実施**(要ユーザー確認)
+- 実機確認済み。`feature/stderr-filter`としてPR #1で`develop`へマージ済み
+
+## 今回(2026-10-06、リリースとカテゴリ色・キー修正・入力補完の検討)の作業
+
+- **v0.2.0リリース**: `pyproject.toml`・`uv.lock`を`0.1.0`→`0.2.0`に更新し、`develop`→`main`のPR #2を出してマージ済み。タグ`v0.2.0`を`main`のマージコミット`8002792`に作成し、`origin`へプッシュ済み(2026-10-07)
+- **PR #3(`feature/category-color-select`)**: アイテム編集フォームのカテゴリ選択で、選択肢は行全体をカテゴリ色の背景、選択中はカテゴリ色のバッジで表示。`category_pick_dialog.py`も各カテゴリを色付きの全幅の行にした。実機確認は未実施(`amber`の白文字の読みにくさが懸念)
+- **PR #4(`fix/dialog-key-passthrough`)**: カテゴリ一覧で`未定`(選択対象外)を選択中に`e`を押すと、メインパネルで選択中のアイテムの編集が開く不具合を修正。`e`と`c`を`not self._is_dialog_open()`で抑制(`ui/keyboard.py`)。実機確認済み
+- **確認済みの仕様**: 同名のアイテムでも`id`(uuid)で別々に扱われ、見積り・累積・GAP・名前変更時の記録同期はすべて`item_id`単位。同名は画面上で区別できない
+- **検討中(未実装)**: 新規アイテム名の入力補完。候補は既存アイテムと実行記録の名前(重複除く)。方法1は`ui.input`の`autocomplete`(最小実装、前方一致・候補1件)、方法2はドロップダウンへの置き換え(`Enter`が登録と衝突し、IME確定のEnterの調整が必要)。補完の対象(名前のみ/カテゴリ・見積りも引き継ぐ)はユーザーの回答待ち。おすすめは方法1で名前のみ
+- 開発環境: `ruff`は未導入(型チェックは`uv run mypy src`)
 
 ## 未実施・今後の検討事項
 
