@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from nicegui import ui
 from nicegui.elements.dark_mode import DarkMode
@@ -78,6 +78,13 @@ class MainView:
                 ui.spinner("hourglass", color="primary")
                 self._running_name_label = ui.label().classes("font-medium text-lg")
                 self._running_remaining_label = ui.label().classes("font-mono text-lg")
+            # 表示する日を前後の日・日付入力で切り替える(今日以外は閲覧用)
+            with ui.row().classes("items-center gap-1"):
+                ui.button(icon="chevron_left", on_click=lambda: self.shift_view_date(-1)).props("flat dense round")
+                self._date_input = ui.input(
+                    value=self._state.view_date.isoformat(), on_change=self._on_view_date_change
+                ).props("type=date dense")
+                ui.button(icon="chevron_right", on_click=lambda: self.shift_view_date(1)).props("flat dense round")
             # 完了アイテムの表示は、未完了のみ(既定)・すべて・完了のみを切り替える
             self._done_filter_toggle = ui.toggle(
                 DONE_FILTER_LABELS, value=self._state.done_filter.value, on_change=self._on_done_filter_change
@@ -200,11 +207,26 @@ class MainView:
                 row.classes(add="border-transparent", remove="border-primary bg-blue-50")
 
     def _toggle(self, item_id: str) -> None:
+        if self._state.is_read_only_view:
+            return
         self._select_all_active = False
         self._state.select(item_id)
         self._state.select_items({item_id})
         self._service.toggle_execution(item_id)
         self._refresh_all()
+
+    def shift_view_date(self, days: int) -> None:
+        self._date_input.value = (self._state.view_date + timedelta(days=days)).isoformat()
+
+    def _on_view_date_change(self, e: ValueChangeEventArguments[str | None]) -> None:
+        if not e.value:
+            return
+        self._state.view_date = date.fromisoformat(e.value)
+        # 表示が切り替わると見えなくなるアイテムが選択されたままにならないよう、選択を解除する
+        self._select_all_active = False
+        self._state.select(None)
+        self._state.select_items(set())
+        self.render.refresh()
 
     def _on_done_filter_change(self, e: ValueChangeEventArguments[str]) -> None:
         self._state.done_filter = DoneFilter(e.value)
@@ -266,12 +288,13 @@ class MainView:
         self.list_container.clear()
         with self.list_container:
             today = date.today()
+            view_date = self._state.view_date
             # 実行中のアイテムは、完了状態による絞り込みに関わらず(元の並びの位置で)表示する
             running = self._service.running_record()
             items = [
                 item
-                for item in self._service.items_due_today(today)
-                if matches_done_filter(item, today, self._state.done_filter)
+                for item in self._service.items_due_today(view_date)
+                if matches_done_filter(item, view_date, self._state.done_filter)
                 or (running is not None and running.item_id == item.id)
             ]
             self._rendered_item_ids = [item.id for item in items]
@@ -279,10 +302,10 @@ class MainView:
                 ui.label("").classes("text-gray-400 italic h-8")
             else:
                 for item in items:
-                    self._render_row(item, today)
+                    self._render_row(item, today, view_date)
         self._update_running_indicator()
 
-    def _render_row(self, item: TodoItem, today: date) -> None:
+    def _render_row(self, item: TodoItem, today: date, view_date: date) -> None:
         running = self._service.running_record()
         is_running = running is not None and running.item_id == item.id
         is_selected = item.id in self._state.selected_item_ids
@@ -299,7 +322,7 @@ class MainView:
             category_label = f"{expired_mark}{category.name}" if category is not None else "未定"
             category_color = category.color if category is not None else "grey"
             ui.badge(category_label).props(f"outline color={category_color}")
-            name_classes = "font-medium" + (f" {DONE_TEXT_CLASSES}" if is_done(item, today) else "")
+            name_classes = "font-medium" + (f" {DONE_TEXT_CLASSES}" if is_done(item, view_date) else "")
             ui.label(item.name).classes(name_classes)
             ui.badge(SCHEDULE_LABELS[item.schedule_type.value]).props("outline")
             if is_running:
@@ -310,10 +333,10 @@ class MainView:
                 self._elapsed_label = label
                 self._elapsed_item_id = item.id
             else:
-                total = self._service.today_total_seconds(item.id, today)
+                total = self._service.today_total_seconds(item.id, view_date)
                 if total > 0:
                     over = self._service.is_over_estimate(item.id)
-                    ui.label(f"本日合計 {format_duration(total)}").classes(
+                    ui.label(f"{'本日' if view_date == today else ''}合計 {format_duration(total)}").classes(
                         "font-mono " + ("text-negative" if over else "text-gray-500")
                     )
             if item.estimate_hours > 0:
