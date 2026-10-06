@@ -5,10 +5,15 @@ from datetime import date
 
 from nicegui import ui
 
-from todoapp.domain.models import ScheduleType
+from todoapp.domain.models import ScheduleType, today_estimate_seconds
 from todoapp.domain.service import TodoService
 from todoapp.ui.dialog_base import DialogMixin
-from todoapp.ui.formatting import SCHEDULE_LABELS, estimate_to_hours_minutes, hours_minutes_to_estimate
+from todoapp.ui.formatting import (
+    SCHEDULE_LABELS,
+    estimate_to_hours_minutes,
+    format_work_balance,
+    hours_minutes_to_estimate,
+)
 
 # ui.selectのoption/selected-itemスロットでPRJコード・種別をバッジ表示するため、
 # ラベル文字列にこの区切り文字で埋め込む(_props["options"]への直接介入は
@@ -21,8 +26,14 @@ def _category_label(name: str, prj_code: str = "", kind: str = "", color: str = 
 
 
 class EditDialog(DialogMixin):
-    def __init__(self, service: TodoService, refresh_all: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        service: TodoService,
+        refresh_all: Callable[[], None],
+        get_standard_work_hours: Callable[[], float],
+    ) -> None:
         self._service = service
+        self._get_standard_work_hours = get_standard_work_hours
         self._refresh_all = refresh_all
         self._item_id: str | None = None
 
@@ -43,6 +54,15 @@ class EditDialog(DialogMixin):
                 self._estimate_minutes_input = ui.number(
                     label="分", min=0, max=59, step=1, precision=0
                 ).classes("flex-grow")
+            with ui.row().classes("w-full items-center no-wrap gap-2"):
+                ui.label("本日の見積り").classes("text-gray-600")
+                self._today_estimate_hours_input = ui.number(label="時間", min=0, step=1).classes("flex-grow")
+                self._today_estimate_minutes_input = ui.number(
+                    label="分", min=0, max=59, step=1, precision=0
+                ).classes("flex-grow")
+            self._work_balance_label = ui.label("").classes("text-sm")
+            for today_input in (self._today_estimate_hours_input, self._today_estimate_minutes_input):
+                today_input.on_value_change(self._update_work_balance)
             self._category_select = ui.select(
                 {None: _category_label("未定")}, label="カテゴリ", value=None
             ).classes("w-full")
@@ -85,13 +105,36 @@ class EditDialog(DialogMixin):
         hours, minutes = estimate_to_hours_minutes(item.estimate_hours)
         self._estimate_hours_input.value = hours
         self._estimate_minutes_input.value = minutes
+        # 限定見積りは設定した日だけ有効なので、他の日は未設定として表示する
+        today_estimate = today_estimate_seconds(item, date.today())
+        today_hours, today_minutes = estimate_to_hours_minutes((today_estimate or 0) / 3600)
+        self._today_estimate_hours_input.value = today_hours
+        self._today_estimate_minutes_input.value = today_minutes
         category_options: dict[str | None, str] = {None: _category_label("未定")}
         category_options.update(
             {c.id: _category_label(c.name, c.prj_code, c.kind, c.color) for c in self._service.categories}
         )
         self._category_select.set_options(category_options, value=item.category_id)
         self._update_anchor_visibility()
+        self._update_work_balance()
         self.dialog.open()
+
+    def _update_work_balance(self) -> None:
+        """標準労働時間から、本日の見積り合計(編集中の入力値を含む)を引いた残りを表示する。"""
+        if self._item_id is None:
+            return
+        editing = hours_minutes_to_estimate(
+            float(self._today_estimate_hours_input.value or 0),
+            float(self._today_estimate_minutes_input.value or 0),
+        )
+        others = self._service.today_estimate_total_seconds(date.today(), exclude_item_id=self._item_id)
+        standard_hours = self._get_standard_work_hours()
+        text, over = format_work_balance(standard_hours, others + editing * 3600)
+        self._work_balance_label.set_text(f"{text}(標準労働時間 {standard_hours:g}時間 − 本日の見積り合計)")
+        if over:
+            self._work_balance_label.classes(add="text-negative", remove="text-gray-600")
+        else:
+            self._work_balance_label.classes(add="text-gray-600", remove="text-negative")
 
     def _update_anchor_visibility(self) -> None:
         self._anchor_input.set_visibility(self._schedule_select.value != ScheduleType.DAILY.value)
@@ -112,6 +155,10 @@ class EditDialog(DialogMixin):
             anchor_date=anchor_date,
             estimate_hours=hours_minutes_to_estimate(
                 float(self._estimate_hours_input.value or 0), float(self._estimate_minutes_input.value or 0)
+            ),
+            today_estimate_hours=hours_minutes_to_estimate(
+                float(self._today_estimate_hours_input.value or 0),
+                float(self._today_estimate_minutes_input.value or 0),
             ),
         )
         self._service.set_item_category(self._item_id, self._category_select.value)

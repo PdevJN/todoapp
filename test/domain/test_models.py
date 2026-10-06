@@ -10,6 +10,7 @@ from todoapp.domain.models import (
     is_done,
     is_due_today,
     matches_done_filter,
+    today_estimate_seconds,
 )
 
 
@@ -187,3 +188,38 @@ def test_matches_done_filter() -> None:
     assert matches_done_filter(done_item, today, DoneFilter.DONE) is True
     assert matches_done_filter(open_item, today, DoneFilter.ALL) is True
     assert matches_done_filter(done_item, today, DoneFilter.ALL) is True
+
+
+def _estimate_item(hours: float, on: date | None) -> TodoItem:
+    return TodoItem(
+        name="設計",
+        schedule_type=ScheduleType.DAILY,
+        anchor_date=date(2026, 8, 30),
+        today_estimate_hours=hours,
+        today_estimate_date=on,
+    )
+
+
+def test_today_estimate_seconds_is_active_only_on_the_set_date() -> None:
+    item = _estimate_item(1.5, date(2026, 8, 30))
+    assert today_estimate_seconds(item, date(2026, 8, 30)) == 5400
+    assert today_estimate_seconds(item, date(2026, 8, 31)) is None
+
+
+def test_today_estimate_seconds_is_none_when_unset() -> None:
+    assert today_estimate_seconds(_estimate_item(0.0, None), date(2026, 8, 30)) is None
+    assert today_estimate_seconds(_estimate_item(0.0, date(2026, 8, 30)), date(2026, 8, 30)) is None
+
+
+def test_today_estimate_seconds_rounds_to_seconds() -> None:
+    item = _estimate_item(10 / 60, date(2026, 8, 30))
+    assert today_estimate_seconds(item, date(2026, 8, 30)) == 600
+
+
+def test_todo_item_roundtrips_today_estimate_and_loads_legacy_data() -> None:
+    item = _estimate_item(1.5, date(2026, 8, 30))
+    assert TodoItem.from_dict(item.to_dict()) == item
+    legacy = {k: v for k, v in item.to_dict().items() if not k.startswith("today_estimate")}
+    loaded = TodoItem.from_dict(legacy)
+    assert loaded.today_estimate_hours == 0.0
+    assert loaded.today_estimate_date is None

@@ -42,6 +42,23 @@ def format_estimate(estimate_hours: float) -> str:
     return f"{minutes}分"
 
 
+def format_estimate_cell(estimate_seconds: float | None, today_estimate_seconds: float | None) -> str:
+    """集計画面の見積り欄。本日だけの限定見積りがあれば括弧書きで併記する。"""
+    text = format_duration(estimate_seconds) if estimate_seconds is not None else "-"
+    if today_estimate_seconds is None:
+        return text
+    return f"{text} ({format_duration(today_estimate_seconds)})"
+
+
+def format_work_balance(standard_work_hours: float, planned_seconds: float) -> tuple[str, bool]:
+    """標準労働時間から本日の見積り合計を引いた残りの表示と、超過したか(ちょうどは超過にしない)を返す。"""
+    balance_seconds = round(standard_work_hours * 3600) - round(planned_seconds)
+    text = format_estimate(abs(balance_seconds) / 3600)
+    if balance_seconds < 0:
+        return f"超過 {text}", True
+    return f"残り {text}", False
+
+
 def format_gap(gap_seconds: float | None) -> str:
     """見積りとのズレ(累積経過時間 - 見積り)を符号付きのHH:MM:SSにする。ズレが無ければ`-`。"""
     if gap_seconds is None:

@@ -8,7 +8,7 @@ from nicegui.elements.dark_mode import DarkMode
 from nicegui.elements.fab import FabAction
 from nicegui.events import GenericEventArguments, SortableEventArguments, ValueChangeEventArguments
 
-from todoapp.domain.models import DoneFilter, ScheduleType, TodoItem, is_category_expired, is_done, matches_done_filter
+from todoapp.domain.models import DoneFilter, ScheduleType, TodoItem, is_category_expired, is_done, matches_done_filter, today_estimate_seconds
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
@@ -276,7 +276,13 @@ class MainView:
 
     def _remaining_display(self, item_id: str) -> str:
         item = next((i for i in self._service.items if i.id == item_id), None)
-        if item is None or item.estimate_hours <= 0:
+        if item is None:
+            return "-"
+        # 本日だけの限定見積りがあれば、本日の実行時間を引いた残りを優先して表示する
+        today_remaining = self._service.today_remaining_seconds(item_id, date.today())
+        if today_remaining is not None:
+            return format_duration(today_remaining)
+        if item.estimate_hours <= 0:
             return "-"
         return format_duration(self._service.remaining_seconds(item_id))
 
@@ -341,3 +347,6 @@ class MainView:
                     )
             if item.estimate_hours > 0:
                 ui.label(f"見積り {format_estimate(item.estimate_hours)}").classes("text-gray-400 text-sm")
+            today_estimate = today_estimate_seconds(item, today)
+            if today_estimate is not None:
+                ui.label(f"本日の見積り {format_estimate(today_estimate / 3600)}").classes("text-gray-400 text-sm")
