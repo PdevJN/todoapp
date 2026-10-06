@@ -190,8 +190,9 @@ def matches_done_filter(item: TodoItem, today: date, done_filter: DoneFilter) ->
 def is_due_today(item: TodoItem, today: date) -> bool:
     if item.schedule_type is ScheduleType.DAILY:
         return True
+    # 週次・月次は基準日から繰り返す。基準日より前の日は対象外とする
     if item.schedule_type is ScheduleType.WEEKLY:
-        return today.weekday() == item.anchor_date.weekday()
+        return today >= item.anchor_date and today.weekday() == item.anchor_date.weekday()
     if item.schedule_type is ScheduleType.MONTHLY:
-        return today.day == _clamped_day(item.anchor_date.day, today)
+        return today >= item.anchor_date and today.day == _clamped_day(item.anchor_date.day, today)
     return today == item.anchor_date

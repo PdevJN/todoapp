@@ -190,6 +190,38 @@ def test_matches_done_filter() -> None:
     assert matches_done_filter(done_item, today, DoneFilter.ALL) is True
 
 
+def test_weekly_is_not_due_before_anchor_date() -> None:
+    # 境界値分析: 基準日当日は対象、基準日の1週間前(同じ曜日)は対象外
+    anchor = date(2026, 8, 24)  # Monday
+    item = _item(ScheduleType.WEEKLY, anchor)
+    assert is_due_today(item, anchor)
+    assert not is_due_today(item, date(2026, 8, 17))
+    assert is_due_today(item, date(2026, 8, 31))
+
+
+def test_monthly_is_not_due_before_anchor_date() -> None:
+    # 境界値分析: 基準日当日は対象、基準日の前月の同じ日は対象外
+    anchor = date(2026, 8, 15)
+    item = _item(ScheduleType.MONTHLY, anchor)
+    assert is_due_today(item, anchor)
+    assert not is_due_today(item, date(2026, 7, 15))
+    assert is_due_today(item, date(2026, 9, 15))
+
+
+def test_monthly_clamped_day_before_anchor_date_is_not_due() -> None:
+    # 月末調整でも、基準日より前の月は対象外(2/28は基準日1/31より後なので対象)
+    anchor = date(2026, 3, 31)
+    item = _item(ScheduleType.MONTHLY, anchor)
+    assert not is_due_today(item, date(2026, 2, 28))
+    assert is_due_today(item, date(2026, 4, 30))
+
+
+def test_daily_is_due_even_before_anchor_date() -> None:
+    # 毎日は基準日を使わない(編集フォームでも設定できない)
+    item = _item(ScheduleType.DAILY, date(2026, 8, 30))
+    assert is_due_today(item, date(2026, 1, 1))
+
+
 def _estimate_item(hours: float, on: date | None) -> TodoItem:
     return TodoItem(
         name="設計",
