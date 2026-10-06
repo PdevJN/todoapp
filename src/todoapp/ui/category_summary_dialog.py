@@ -8,7 +8,7 @@ from nicegui import ui
 from todoapp.domain.models import Category
 from todoapp.domain.service import ItemGapRow, TodoService
 from todoapp.ui.dialog_base import DialogMixin
-from todoapp.ui.formatting import DONE_TEXT_CLASSES, format_duration, format_gap, gap_background
+from todoapp.ui.formatting import DONE_TEXT_CLASSES, format_duration, format_estimate_cell, format_gap, gap_background
 
 UNCATEGORIZED_COLOR = "#9e9e9e"
 _TAB_CATEGORY = "カテゴリ別"
@@ -167,7 +167,7 @@ class CategorySummaryDialog(DialogMixin):
             ui.label(row.name).classes(name_classes)
             ui.label(format_duration(row.today_seconds)).classes(_ITEM_NUMBER_CLASSES)
             ui.label(_format_optional(row.cumulative_seconds)).classes(_ITEM_NUMBER_CLASSES)
-            ui.label(_format_optional(row.estimate_seconds)).classes(_ITEM_NUMBER_CLASSES)
+            ui.label(format_estimate_cell(row.estimate_seconds, row.today_estimate_seconds)).classes(_ITEM_NUMBER_CLASSES)
             gap_label = ui.label(format_gap(row.gap_seconds)).classes(_ITEM_NUMBER_CLASSES + " rounded")
             background = gap_background(row.gap_seconds, row.estimate_seconds)
             if background is not None:
