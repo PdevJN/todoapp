@@ -1,8 +1,12 @@
 import json
 from datetime import date
 from pathlib import Path
+from typing import Any
 
-from todoapp.repository.holiday_repository import HolidayRepository, parse_holiday_csv
+import httpx
+import pytest
+
+from todoapp.repository.holiday_repository import HolidayRepository, fetch_holiday_csv, parse_holiday_csv
 
 _SAMPLE_CSV = (
     "国民の祝日・休日月日,国民の祝日・休日名称\r\n"
@@ -59,3 +63,38 @@ def test_repository_load_ignores_unparsable_date_keys(tmp_path: Path) -> None:
     repository = HolidayRepository(path=path)
 
     assert repository.load() == {}
+
+
+def test_parse_holiday_csv_skips_rows_with_missing_date_or_name() -> None:
+    raw = (
+        "国民の祝日・休日月日,国民の祝日・休日名称\r\n"
+        "2024/1/1,元日\r\n"
+        "2024/1/2,\r\n"  # 名称なし
+        ",成人の日\r\n"  # 日付なし
+        "2024/1/3\r\n"  # 列が足りない
+    ).encode("cp932")
+
+    assert parse_holiday_csv(raw) == {date(2024, 1, 1): "元日"}
+
+
+def test_fetch_holiday_csv_returns_response_body_and_sends_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, Any] = {}
+
+    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
+        calls.update(url=url, headers=headers, timeout=timeout)
+        return httpx.Response(200, content=b"body", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    assert fetch_holiday_csv("https://example.test/h.csv", timeout=3.0) == b"body"
+    assert calls == {"url": "https://example.test/h.csv", "headers": {"User-Agent": "todoapp/1.0"}, "timeout": 3.0}
+
+
+def test_fetch_holiday_csv_raises_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
+        return httpx.Response(500, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        fetch_holiday_csv("https://example.test/h.csv")
