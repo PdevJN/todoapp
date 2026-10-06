@@ -1020,3 +1020,114 @@ def test_category_today_item_totals_marks_done_items() -> None:
     service.set_done([item.id], True, TODAY)
 
     assert service.category_today_item_totals(TODAY) == {work.id: [("設計", 0, True)]}
+
+
+def test_edit_item_sets_today_estimate_for_the_clock_date() -> None:
+    service, _, _ = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+
+    service.edit_item(item.id, today_estimate_hours=1.0)
+
+    assert item.today_estimate_hours == 1.0
+    assert item.today_estimate_date == date(2026, 8, 30)
+
+
+def test_edit_item_with_zero_today_estimate_clears_it() -> None:
+    service, _, _ = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(item.id, today_estimate_hours=1.0)
+
+    service.edit_item(item.id, today_estimate_hours=0.0)
+
+    assert item.today_estimate_hours == 0.0
+    assert item.today_estimate_date is None
+
+
+def test_today_remaining_seconds_counts_down_from_todays_execution_only() -> None:
+    service, _, clock = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=5.0)
+    service.edit_item(item.id, today_estimate_hours=1.0)
+
+    service.start(item.id)
+    clock.advance(1200)
+
+    assert service.today_remaining_seconds(item.id, date(2026, 8, 30)) == 2400
+
+
+def test_today_remaining_seconds_does_not_go_below_zero() -> None:
+    service, _, clock = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(item.id, today_estimate_hours=0.5)
+
+    service.start(item.id)
+    clock.advance(3600)
+
+    assert service.today_remaining_seconds(item.id, date(2026, 8, 30)) == 0
+
+
+def test_today_remaining_seconds_is_none_without_active_today_estimate() -> None:
+    service, _, _ = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=1.0)
+    assert service.today_remaining_seconds(item.id, date(2026, 8, 30)) is None
+
+    service.edit_item(item.id, today_estimate_hours=1.0)
+    assert service.today_remaining_seconds(item.id, date(2026, 8, 31)) is None
+
+
+def test_item_gap_rows_include_today_estimate_without_changing_gap() -> None:
+    service, _, clock = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=2.0)
+    service.edit_item(item.id, today_estimate_hours=0.5)
+
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+
+    assert service.item_gap_rows(date(2026, 8, 30)) == [ItemGapRow("設計", 600, 600, 7200, -6600, False, 1800)]
+
+
+def test_item_gap_rows_include_today_estimate_without_normal_estimate() -> None:
+    service, _, _ = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(item.id, today_estimate_hours=0.5)
+
+    row = service.item_gap_rows(date(2026, 8, 30))[0]
+
+    assert row.estimate_seconds is None
+    assert row.gap_seconds is None
+    assert row.today_estimate_seconds == 1800
+
+
+def test_today_estimate_total_seconds_sums_active_estimates_of_items_due_today() -> None:
+    service, _, _ = _service()
+    today = date(2026, 8, 30)
+    a = service.add_item("A", ScheduleType.DAILY, today)
+    b = service.add_item("B", ScheduleType.DAILY, today)
+    service.add_item("通常見積りのみ", ScheduleType.DAILY, today, estimate_hours=5.0)
+    not_due = service.add_item("対象外", ScheduleType.ONE_TIME, date(2026, 8, 1))
+    service.edit_item(a.id, today_estimate_hours=1.0)
+    service.edit_item(b.id, today_estimate_hours=0.5)
+    service.edit_item(not_due.id, today_estimate_hours=3.0)
+
+    assert service.today_estimate_total_seconds(today) == 5400
+
+
+def test_today_estimate_total_seconds_includes_done_items_and_can_exclude_one() -> None:
+    service, _, _ = _service()
+    today = date(2026, 8, 30)
+    a = service.add_item("A", ScheduleType.DAILY, today)
+    b = service.add_item("B", ScheduleType.DAILY, today)
+    service.edit_item(a.id, today_estimate_hours=1.0)
+    service.edit_item(b.id, today_estimate_hours=0.5)
+    service.set_done([a.id], True, today)
+
+    assert service.today_estimate_total_seconds(today) == 5400
+    assert service.today_estimate_total_seconds(today, exclude_item_id=b.id) == 3600
+
+
+def test_today_estimate_total_seconds_ignores_estimates_set_on_other_days() -> None:
+    service, _, clock = _service()
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(item.id, today_estimate_hours=1.0)
+
+    assert service.today_estimate_total_seconds(date(2026, 8, 31)) == 0

@@ -13,7 +13,7 @@ from todoapp.ui.app_state import AppState, Screen
 # キー操作を追加したら、ここにも追加すること(test_keyboard.pyが登録漏れを検出する)
 SHORTCUT_KEYS = [
     "Escape", "Enter", "Backspace", "Delete", "ArrowUp", "ArrowDown",
-    "e", "c", "d", "l", "L", "g", "T", "j", "k",
+    "e", "c", "d", "l", "L", "g", "T", "o", "j", "k",
 ]  # fmt: skip
 
 
@@ -33,6 +33,7 @@ class KeyboardController:
         open_category_list: Callable[[], None],
         open_category_edit_dialog: Callable[[str], None],
         open_category_summary: Callable[[], None],
+        open_settings: Callable[[], None],
         toggle_done_selected_items: Callable[[], None],
         delete_selected_items: Callable[[], None],
         delete_selected_records: Callable[[], None],
@@ -66,6 +67,7 @@ class KeyboardController:
         self._open_category_list = open_category_list
         self._open_category_edit_dialog = open_category_edit_dialog
         self._open_category_summary = open_category_summary
+        self._open_settings = open_settings
         self._toggle_done_selected_items = toggle_done_selected_items
         self._delete_selected_items = delete_selected_items
         self._delete_selected_records = delete_selected_records
@@ -167,6 +169,8 @@ class KeyboardController:
             self._open_category_list()
         elif e.key == "T" and self._state.screen in (Screen.MAIN, Screen.LIST):
             self._open_category_summary()
+        elif e.key == "o" and self._state.screen is Screen.MAIN and not self._is_dialog_open():
+            self._open_settings()
         elif e.key.delete or e.key.backspace:
             if self._is_category_list_open():
                 self._delete_selected_categories()

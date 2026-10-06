@@ -67,3 +67,27 @@ def test_save_preserves_both_theme_and_week_start_together(tmp_path: Path) -> No
     loaded = repository.load()
 
     assert loaded == AppConfig(theme="dark", week_start="monday")
+
+
+def test_load_returns_eight_hours_standard_work_hours_by_default(tmp_path: Path) -> None:
+    repository = ConfigRepository(path=tmp_path / "config.json")
+    assert repository.load().standard_work_hours == 8.0
+
+    path = tmp_path / "legacy.json"
+    path.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+    assert ConfigRepository(path=path).load().standard_work_hours == 8.0
+
+
+def test_save_then_load_roundtrips_standard_work_hours(tmp_path: Path) -> None:
+    repository = ConfigRepository(path=tmp_path / "config.json")
+    repository.save(AppConfig(standard_work_hours=7.5))
+
+    assert repository.load().standard_work_hours == 7.5
+
+
+def test_load_falls_back_to_default_for_invalid_standard_work_hours(tmp_path: Path) -> None:
+    # 同値分析: 数値以外・0以下・真偽値(異常系)は既定の8.0に丸められる
+    for invalid in ("8", 0, -1, None, True):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"standard_work_hours": invalid}), encoding="utf-8")
+        assert ConfigRepository(path=path).load().standard_work_hours == 8.0

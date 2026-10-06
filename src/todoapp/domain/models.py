@@ -72,6 +72,8 @@ class TodoItem:
     schedule_type: ScheduleType
     anchor_date: date
     estimate_hours: float = 0.0
+    today_estimate_hours: float = 0.0  # 本日だけの限定見積り。有効かどうかはtoday_estimate_seconds()で判定する
+    today_estimate_date: date | None = None  # 限定見積りを設定した日
     category_id: str | None = None
     done_date: date | None = None  # 完了した日(最後に完了にした日)。判定はis_done()を使う
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -83,6 +85,8 @@ class TodoItem:
             "schedule_type": self.schedule_type.value,
             "anchor_date": self.anchor_date.isoformat(),
             "estimate_hours": self.estimate_hours,
+            "today_estimate_hours": self.today_estimate_hours,
+            "today_estimate_date": self.today_estimate_date.isoformat() if self.today_estimate_date else None,
             "category_id": self.category_id,
             "done_date": self.done_date.isoformat() if self.done_date else None,
         }
@@ -90,12 +94,15 @@ class TodoItem:
     @staticmethod
     def from_dict(data: dict[str, Any]) -> TodoItem:
         done_date = data.get("done_date")
+        today_estimate_date = data.get("today_estimate_date")
         return TodoItem(
             id=data["id"],
             name=data["name"],
             schedule_type=ScheduleType(data["schedule_type"]),
             anchor_date=date.fromisoformat(data["anchor_date"]),
             estimate_hours=data["estimate_hours"],
+            today_estimate_hours=data.get("today_estimate_hours", 0.0),
+            today_estimate_date=date.fromisoformat(today_estimate_date) if today_estimate_date else None,
             category_id=data.get("category_id"),
             done_date=date.fromisoformat(done_date) if done_date else None,
         )
@@ -163,6 +170,15 @@ def is_done(item: TodoItem, today: date) -> bool:
     if item.schedule_type is ScheduleType.ONE_TIME:
         return True
     return item.done_date == today
+
+
+def today_estimate_seconds(item: TodoItem, today: date) -> int | None:
+    """本日だけの限定見積り(秒)。設定した日以外、または未設定の場合は`None`。"""
+    # 見積りは10分=0.1666…時間のような小数で保存されるため、秒に丸める
+    seconds = round(item.today_estimate_hours * 3600)
+    if item.today_estimate_date != today or seconds <= 0:
+        return None
+    return seconds
 
 
 def matches_done_filter(item: TodoItem, today: date, done_filter: DoneFilter) -> bool:
