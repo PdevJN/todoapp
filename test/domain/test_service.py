@@ -1131,3 +1131,37 @@ def test_today_estimate_total_seconds_ignores_estimates_set_on_other_days() -> N
     service.edit_item(item.id, today_estimate_hours=1.0)
 
     assert service.today_estimate_total_seconds(date(2026, 8, 31)) == 0
+
+
+def test_item_name_candidates_are_unique_and_newest_first() -> None:
+    service, _, _ = _service()
+    today = date(2026, 8, 30)
+    service.add_item("設計", ScheduleType.DAILY, today)
+    service.add_item("実装", ScheduleType.DAILY, today)
+    service.add_item("設計", ScheduleType.ONE_TIME, today)
+
+    assert service.item_name_candidates() == ["設計", "実装"]
+
+
+def test_item_name_candidates_include_names_of_deleted_items_from_records() -> None:
+    service, _, clock = _service()
+    item = service.add_item("レビュー", ScheduleType.DAILY, date(2026, 8, 30))
+    service.start(item.id)
+    clock.advance(60)
+    service.stop_running()
+    service.delete_items({item.id})
+    service.add_item("実装", ScheduleType.DAILY, date(2026, 8, 30))
+
+    assert service.item_name_candidates() == ["実装", "レビュー"]
+
+
+def test_item_name_candidates_skip_empty_names_and_follow_renames() -> None:
+    service, _, clock = _service()
+    item = service.add_item("旧名", ScheduleType.DAILY, date(2026, 8, 30))
+    service.start(item.id)
+    clock.advance(60)
+    service.stop_running()
+    service.edit_item(item.id, name="新名")
+    service.add_item("", ScheduleType.DAILY, date(2026, 8, 30))
+
+    assert service.item_name_candidates() == ["新名"]

@@ -193,6 +193,13 @@ class TodoService:
             if is_due_today(item, today) and matches_done_filter(item, today, done_filter)
         ]
 
+    def item_name_candidates(self) -> list[str]:
+        """新規アイテム名の入力補完の候補。既存アイテム(新しい登録順)、実行記録(新しい順)の名前を重複なしで返す。"""
+        names = [item.name for item in reversed(self._data.items)]
+        names += [record.item_name for record in sorted(self._data.records, key=lambda r: r.start_time, reverse=True)]
+        # dict.fromkeysは最初に現れた順を保って重複を除く。空の名前は候補にしない
+        return [name for name in dict.fromkeys(names) if name]
+
     def set_done(self, item_ids: Iterable[str], done: bool, today: date) -> None:
         ids = set(item_ids)
         for item in self._data.items:
