@@ -94,9 +94,11 @@ class MainView:
             # ブレでSortableJSがドラッグ開始と誤判定し、click/dblclickイベントが失われることがある
             self.list_container.make_sortable(on_end=self._on_reorder, options={"delay": 150})
             self.render()
-            self._new_item_input = ui.input(placeholder="新しいアイテムを入力してEnter(Shift+Enterでカテゴリ選択)").classes(
-                "w-full"
-            )
+            # 既存アイテム・過去の実行記録の名前を、前方一致で薄く表示し、Tabで確定する
+            self._new_item_input = ui.input(
+                placeholder="新しいアイテムを入力してEnter(Shift+Enterでカテゴリ選択)",
+                autocomplete=self._service.item_name_candidates(),
+            ).classes("w-full")
             self._new_item_input.on("keydown.enter.exact", self._add_item, js_handler=IME_SAFE_ENTER_HANDLER)
             self._new_item_input.on(
                 "keydown.enter.shift", self._add_item_and_pick_category, js_handler=IME_SAFE_ENTER_HANDLER
@@ -309,6 +311,8 @@ class MainView:
             else:
                 for item in items:
                     self._render_row(item, today, view_date)
+        if self._new_item_input is not None:
+            self._new_item_input.set_autocomplete(self._service.item_name_candidates())
         self._update_running_indicator()
 
     def _render_row(self, item: TodoItem, today: date, view_date: date) -> None:
