@@ -2,7 +2,9 @@ from todoapp.ui.formatting import (
     estimate_to_hours_minutes,
     format_duration,
     format_estimate,
+    format_estimate_cell,
     format_gap,
+    format_work_balance,
     gap_background,
     hours_minutes_to_estimate,
 )
@@ -115,3 +117,22 @@ def test_gap_background_gets_darker_as_ratio_grows_and_caps_at_full_ratio() -> N
     assert gap_background(3600, 3600) == "rgba(229, 57, 53, 0.6)"
     assert gap_background(7200, 3600) == "rgba(229, 57, 53, 0.6)"
     assert gap_background(-7200, 3600) == "rgba(30, 136, 229, 0.6)"
+
+
+def test_format_estimate_cell_shows_today_estimate_in_parentheses() -> None:
+    assert format_estimate_cell(None, None) == "-"
+    assert format_estimate_cell(10800, None) == "03:00:00"
+    assert format_estimate_cell(10800, 5400) == "03:00:00 (01:30:00)"
+    assert format_estimate_cell(None, 5400) == "- (01:30:00)"
+
+
+def test_format_work_balance_shows_remaining_or_overrun() -> None:
+    assert format_work_balance(8.0, 3 * 3600) == ("残り 5時間", False)
+    assert format_work_balance(8.0, 0) == ("残り 8時間", False)
+    assert format_work_balance(8.0, 10 * 3600 + 30 * 60) == ("超過 2時間30分", True)
+
+
+def test_format_work_balance_exact_match_is_not_over() -> None:
+    # 境界値分析: 合計が標準労働時間ちょうどは超過扱いにしない
+    assert format_work_balance(8.0, 8 * 3600) == ("残り 0分", False)
+    assert format_work_balance(8.0, 8 * 3600 + 60) == ("超過 1分", True)

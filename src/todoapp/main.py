@@ -35,6 +35,7 @@ from todoapp.ui.log_view import LogView
 from todoapp.ui.main_view import MainView
 from todoapp.ui.record_edit_dialog import RecordEditDialog
 from todoapp.ui.record_timeline_dialog import RecordTimelineDialog
+from todoapp.ui.settings_dialog import SettingsDialog
 
 
 @ui.page("/")
@@ -55,6 +56,11 @@ def build_app() -> None:
     def _on_week_start_change(week_start: WeekStart) -> None:
         config.week_start = week_start
         config_repository.save(config)
+
+    def _on_standard_work_hours_save(hours: float) -> None:
+        config.standard_work_hours = hours
+        config_repository.save(config)
+        refresh_all()
 
     holiday_repository = HolidayRepository()
     holidays: dict[date, str] = holiday_repository.load()
@@ -204,7 +210,8 @@ def build_app() -> None:
         open_help=help_dialog.open,
     )
     list_view = ListView(service, state)
-    edit_dialog = EditDialog(service, refresh_all=refresh_all)
+    edit_dialog = EditDialog(service, refresh_all=refresh_all, get_standard_work_hours=lambda: config.standard_work_hours)
+    settings_dialog = SettingsDialog(lambda: config.standard_work_hours, _on_standard_work_hours_save)
     record_timeline_dialog = RecordTimelineDialog(service, refresh_all=refresh_all)
     log_view = LogView(service, state, open_timeline_edit=record_timeline_dialog.open_for)
     record_edit_dialog = RecordEditDialog(service, refresh_all=refresh_all)
@@ -231,6 +238,7 @@ def build_app() -> None:
     category_kind_dialog.build()
     confirm_dialog.build()
     help_dialog.build()
+    settings_dialog.build()
 
     main_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.MAIN)
     list_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.LIST)
@@ -248,6 +256,7 @@ def build_app() -> None:
         category_kind_dialog,
         confirm_dialog,
         help_dialog,
+        settings_dialog,
     ]
 
     keyboard = KeyboardController(
@@ -263,6 +272,8 @@ def build_app() -> None:
         open_category_list=category_list_dialog.open,
         open_category_edit_dialog=category_edit_dialog.open_for,
         open_category_summary=category_summary_dialog.open,
+        open_settings=settings_dialog.open,
+        shift_view_date=main_view.shift_view_date,
         toggle_done_selected_items=toggle_done_selected_items,
         delete_selected_items=delete_selected_items,
         delete_selected_records=delete_selected_records,

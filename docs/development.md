@@ -19,6 +19,7 @@ src/todoapp/
 │   └── record_layout.py     # 作業ログの時間編集の吸着ロジック(1分単位・隣接記録の境界へ密着)の純粋関数
 ├── repository/     # JSON永続化(json_repository.py: todos.json / config_repository.py: config.json / holiday_repository.py: holidays.json・祝日CSV取得)
 ├── ui/              # NiceGUI画面
+│   ├── settings_dialog.py       # 設定ダイアログ(`o`キー。現在は標準労働時間のみ)
 │   ├── main_view.py             # メインパネル(一覧・完了状態の絞り込み・新規登録・テーマFAB・実行中フローティング表示)
 │   ├── list_view.py             # 編集一覧
 │   ├── log_view.py              # 本日の作業ログ(実行順/カテゴリ別)
@@ -45,7 +46,7 @@ src/todoapp/
 | ファイル | 内容 |
 |---|---|
 | `~/.todoapp/todos.json` | アイテム(完了日を含む)・実行記録・カテゴリ |
-| `~/.todoapp/config.json` | テーマ設定(`auto`/`light`/`dark`)・週次カレンダーの週の開始曜日 |
+| `~/.todoapp/config.json` | テーマ設定(`auto`/`light`/`dark`)・週次カレンダーの週の開始曜日・標準労働時間 |
 | `~/.todoapp/holidays.json` | 祝日データのキャッシュ(内閣府CSVから取得) |
 
 ## キー操作を追加するとき

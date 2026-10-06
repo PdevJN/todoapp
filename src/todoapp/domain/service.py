@@ -14,6 +14,7 @@ from todoapp.domain.models import (
     is_done,
     is_due_today,
     matches_done_filter,
+    today_estimate_seconds,
 )
 
 
@@ -31,6 +32,7 @@ class ItemGapRow(NamedTuple):
     estimate_seconds: int | None
     gap_seconds: float | None  # 累積経過時間 - 見積り(超過が正)
     done: bool = False
+    today_estimate_seconds: int | None = None  # 本日だけの限定見積り(未設定は`None`)
 
 
 class TodoService:
@@ -101,6 +103,7 @@ class TodoService:
         schedule_type: ScheduleType | None = None,
         anchor_date: date | None = None,
         estimate_hours: float | None = None,
+        today_estimate_hours: float | None = None,
     ) -> None:
         item = self._find_item(item_id)
         if name is not None:
@@ -116,6 +119,10 @@ class TodoService:
             item.anchor_date = anchor_date
         if estimate_hours is not None:
             item.estimate_hours = estimate_hours
+        if today_estimate_hours is not None:
+            # 限定見積りは設定した日だけ有効。0で解除する
+            item.today_estimate_hours = today_estimate_hours
+            item.today_estimate_date = self._clock().date() if today_estimate_hours > 0 else None
         self._save()
 
     def running_record(self) -> ExecutionRecord | None:
@@ -220,6 +227,22 @@ class TodoService:
         item = self._find_item(item_id)
         estimate_seconds = item.estimate_hours * 3600
         return max(estimate_seconds - self.cumulative_seconds(item_id), 0.0)
+
+    def today_remaining_seconds(self, item_id: str, today: date) -> float | None:
+        """限定見積りから本日の実行時間を引いた残り。限定見積りが無効なら`None`。"""
+        estimate = today_estimate_seconds(self._find_item(item_id), today)
+        if estimate is None:
+            return None
+        return max(estimate - self.today_total_seconds(item_id, today), 0.0)
+
+    def today_estimate_total_seconds(self, today: date, exclude_item_id: str | None = None) -> int:
+        """本日の実行対象アイテムの、有効な限定見積り(完了済みも含む)の合計。編集中のアイテムは除外できる。"""
+        total = 0
+        for item in self.items_due_today(today):
+            if item.id == exclude_item_id:
+                continue
+            total += today_estimate_seconds(item, today) or 0
+        return total
 
     def is_over_estimate(self, item_id: str) -> bool:
         item = self._find_item(item_id)
@@ -366,10 +389,15 @@ class TodoService:
             done = is_done(item, today)
             # 見積りは10分=0.1666…時間のような小数で保存されるため、秒に丸める
             estimate = round(item.estimate_hours * 3600)
+            today_estimate = today_estimate_seconds(item, today)
             if estimate > 0:
-                rows.append(ItemGapRow(item.name, today_seconds, cumulative, estimate, cumulative - estimate, done))
+                rows.append(
+                    ItemGapRow(
+                        item.name, today_seconds, cumulative, estimate, cumulative - estimate, done, today_estimate
+                    )
+                )
             else:
-                rows.append(ItemGapRow(item.name, today_seconds, cumulative, None, None, done))
+                rows.append(ItemGapRow(item.name, today_seconds, cumulative, None, None, done, today_estimate))
         return rows
 
     def kind_today_totals(self, today: date) -> dict[str, float]:
