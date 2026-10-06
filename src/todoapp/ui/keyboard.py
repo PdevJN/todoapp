@@ -12,7 +12,7 @@ from todoapp.ui.app_state import AppState, Screen
 # 押されたキーを誰も処理しないとシステム警告音が鳴るため、main.pyがこれらをpreventDefault()する。
 # キー操作を追加したら、ここにも追加すること(test_keyboard.pyが登録漏れを検出する)
 SHORTCUT_KEYS = [
-    "Escape", "Enter", "Backspace", "Delete", "ArrowUp", "ArrowDown",
+    "Escape", "Enter", "Backspace", "Delete", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
     "e", "c", "d", "l", "L", "g", "T", "j", "k",
 ]  # fmt: skip
 
@@ -33,6 +33,7 @@ class KeyboardController:
         open_category_list: Callable[[], None],
         open_category_edit_dialog: Callable[[str], None],
         open_category_summary: Callable[[], None],
+        shift_view_date: Callable[[int], None],
         toggle_done_selected_items: Callable[[], None],
         delete_selected_items: Callable[[], None],
         delete_selected_records: Callable[[], None],
@@ -66,6 +67,7 @@ class KeyboardController:
         self._open_category_list = open_category_list
         self._open_category_edit_dialog = open_category_edit_dialog
         self._open_category_summary = open_category_summary
+        self._shift_view_date = shift_view_date
         self._toggle_done_selected_items = toggle_done_selected_items
         self._delete_selected_items = delete_selected_items
         self._delete_selected_records = delete_selected_records
@@ -136,13 +138,18 @@ class KeyboardController:
                 self._move_main_selection(delta)
             return
 
+        if (e.key.arrow_left or e.key.arrow_right) and e.modifiers.shift:
+            if self._state.screen is Screen.MAIN and not self._is_dialog_open():
+                self._shift_view_date(1 if e.key.arrow_right else -1)
+            return
+
         item_id = self._state.selected_item_id
 
         if e.key.enter:
             # ダイアログ(作業ログ等)にはフォーカス可能な入力欄が無い行もあり、
             # その場合はキーがどこにもフォーカスされずここまで届いてしまう。
             # ダイアログ表示中はメインパネルのアイテム実行トグルを抑制する
-            if item_id is not None and not self._is_dialog_open():
+            if item_id is not None and not self._is_dialog_open() and not self._state.is_read_only_view:
                 self._service.toggle_execution(item_id)
                 self._refresh_all()
             return
@@ -154,9 +161,9 @@ class KeyboardController:
                 self._open_record_edit_dialog(self._state.selected_record_id)
             elif item_id is not None and not self._is_dialog_open():
                 self._open_edit_dialog(item_id)
-        elif e.key == "d" and not self._is_dialog_open():
+        elif e.key == "d" and not self._is_dialog_open() and not self._state.is_read_only_view:
             self._toggle_done_selected_items()
-        elif e.key == "c" and item_id is not None and not self._is_dialog_open():
+        elif e.key == "c" and item_id is not None and not self._is_dialog_open() and not self._state.is_read_only_view:
             self._service.cancel_running(item_id)
             self._refresh_all()
         elif e.key == "l":
