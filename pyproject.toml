@@ -42,6 +42,11 @@ ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
+# NiceGUIの`user`フィクスチャ(ブラウザ無しの画面テスト)を使う。main_fileは空にして、
+# 画面はtest/ui/conftest.pyのフィクスチャが保存先を一時ディレクトリへ向けて組み立てる
+addopts = "-p nicegui.testing.user_plugin"
+main_file = ""
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 branch = true
