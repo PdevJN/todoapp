@@ -40,11 +40,16 @@ from todoapp.ui.settings_dialog import SettingsDialog
 
 @ui.page("/")
 def build_app() -> None:
-    repository = JsonTodoRepository()
+    build_app_ui(JsonTodoRepository(), ConfigRepository(), HolidayRepository())
+
+
+def build_app_ui(
+    repository: JsonTodoRepository, config_repository: ConfigRepository, holiday_repository: HolidayRepository
+) -> None:
+    """画面を組み立てる。保存先を引数で受け取るのは、テストで`~/.todoapp`を汚さないため。"""
     service = TodoService(repository)
     state = AppState()
 
-    config_repository = ConfigRepository()
     config = config_repository.load()
 
     def _on_theme_change(e: ValueChangeEventArguments[bool | None]) -> None:
@@ -62,7 +67,6 @@ def build_app() -> None:
         config_repository.save(config)
         refresh_all()
 
-    holiday_repository = HolidayRepository()
     holidays: dict[date, str] = holiday_repository.load()
 
     def _refresh_holidays() -> bool:

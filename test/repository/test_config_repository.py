@@ -1,7 +1,15 @@
 import json
 from pathlib import Path
 
-from todoapp.repository.config_repository import AppConfig, ConfigRepository
+import pytest
+
+from todoapp.repository.config_repository import (
+    AppConfig,
+    ConfigRepository,
+    Theme,
+    dark_mode_value_to_theme,
+    theme_to_dark_mode_value,
+)
 
 
 def test_load_returns_auto_theme_by_default_when_file_missing(tmp_path: Path) -> None:
@@ -91,3 +99,35 @@ def test_load_falls_back_to_default_for_invalid_standard_work_hours(tmp_path: Pa
         path = tmp_path / "config.json"
         path.write_text(json.dumps({"standard_work_hours": invalid}), encoding="utf-8")
         assert ConfigRepository(path=path).load().standard_work_hours == 8.0
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("light", "light"), ("dark", "dark"), ("auto", "auto"), ("", "auto"), (None, "auto"), (1, "auto")],
+)
+def test_load_parses_theme_equivalence_classes(tmp_path: Path, raw: object, expected: str) -> None:
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"theme": raw}), encoding="utf-8")
+
+    assert ConfigRepository(path=path).load().theme == expected
+
+
+@pytest.mark.parametrize(
+    ("theme", "dark_mode"),
+    [("light", False), ("dark", True), ("auto", None)],
+)
+def test_theme_and_dark_mode_value_convert_both_ways(theme: Theme, dark_mode: bool | None) -> None:
+    assert theme_to_dark_mode_value(theme) is dark_mode
+    assert dark_mode_value_to_theme(dark_mode) == theme
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [(0.1, 0.1), (24, 24.0), (8, 8.0), (0, 8.0), (-0.1, 8.0), ("8", 8.0), (None, 8.0), (True, 8.0), (False, 8.0)],
+)
+def test_load_standard_work_hours_boundaries(tmp_path: Path, raw: object, expected: float) -> None:
+    # 0以下は既定値、0より大きい最小側の値と整数はそのまま採用する。真偽値は数値として扱わない
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"standard_work_hours": raw}), encoding="utf-8")
+
+    assert ConfigRepository(path=path).load().standard_work_hours == expected

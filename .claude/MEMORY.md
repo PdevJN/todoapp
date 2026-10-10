@@ -1,14 +1,13 @@
 # 作業状況メモ
 
-最終更新: 2026-10-07(v0.3.0を`main`へリリースし、タグ`v0.3.0`をプッシュ済み。表示日の切り替え・本日の見積り・標準労働時間・週次/月次の基準日以降のみ対象、を追加。新規アイテム名の入力補完は未着手のまま保留)
+最終更新: 2026-10-07(新規アイテム名の入力補完をPR #12で`develop`へマージ済み・手動確認済み。`main`へは未反映で、`main`へのPRはユーザーの指示があるまで作らない。テスト強化の作業中: ドメイン層は完了・コミット済み、UI層は作業途中で未コミット)
 
 ## 現在のブランチ
 
-`develop`(v0.3.0リリース済み。メモ更新用に`docs/update-memory-0.3.0`を切って作業)。
+`test/strengthen-coverage`(`origin/develop`から作成。追跡先がまだ`origin/develop`のため、プッシュ前に`git branch --set-upstream-to`等で直すこと)。
 
-保留中: `feature/item-name-autocomplete`(新規アイテム名の入力補完。古い`develop`(`39d55cb`)から切ったままで、再開時に最新の`develop`を取り込むこと)。
-
-旧メモ: `develop`(`feature/todo-app-mvp`は`9ead194`で一度`develop`へマージ済みだったが、その後両ブランチが個別に進んだため、今回`feature/todo-app-mvp`の↑/↓・j/kキー選択切替とシステム警告音修正を`develop`へ再マージした)
+- コミット済み: `e490cf1` ドメイン・リポジトリ層の同値クラス・境界値テスト、`pytest-asyncio`・`pytest-xdist`のdev依存追加、ブランチカバレッジ有効化
+- 未コミット(作業中): UI層の画面テスト(下記「今回(2026-10-07、テスト強化)」参照)
 
 ## これまでの作業
 
@@ -324,9 +323,39 @@ src/todoapp/
 - **確認済みの現状**: 集計は当日のみで、土日祝の判定は集計・グラフに無い(祝日データはカレンダーの色分けだけに使用)。休日扱い(毎日アイテムの除外・標準労働時間の0扱い等)は未対応で、必要になったら設計する
 - **作業環境の注意**: サンドボックスが`.venv`のPython実行を拒否するため、`uv run pytest`・`uv run mypy src`は`dangerouslyDisableSandbox`で実行する。`git push`・`gh`は認証の都合でサンドボックスから使えないため、プッシュはユーザーが`! git push ...`で実行し、PR作成の`gh`はサンドボックス外で実行する。`git fetch`は`allowed_domains`に`github.com`・`*.github.com`を付けると通る(時々403になるが再試行で通る)
 
+## 今回(2026-10-07、テスト強化: ドメイン分析・UIカバレッジ)の作業
+
+依頼: 「UIカバレッジ強化」「同値クラス・境界値分析」「ドメイン分析」の観点でテストを拡張する(順番はドメイン→UI。`pytest-asyncio`の追加は承認済み。`python-xdist`は導入、プロファイリングは依存を増やさず`cProfile`・`--durations`で調査)。
+
+**ステップ1(完了・コミット`e490cf1`)**: ドメイン・リポジトリ層
+- 追加: `test/domain/test_models_equivalence.py`・`test_service_boundary.py`・`test_record_layout_boundary.py`、`test/repository/`への追記(テーマ・標準労働時間・祝日CSV・`fetch_holiday_csv`)。201件→365件
+- ドメイン層は行・ブランチとも既に100%だったため、方針は「カバレッジを上げる」ではなく「入力の同値クラスと境界値の網羅」。`pyproject.toml`に`[tool.coverage.run] branch = true`を追加
+- 判明した仕様: 本日の見積りの秒への丸めはPythonの`round`(偶数丸め)で、0.5秒→0秒、1.5秒→2秒。テストで固定した(不具合ではない)
+
+**ステップ2(作業中・未コミット)**: UI層
+- `test/ui/test_keyboard_controller.py`(75件): `KeyboardController._on_key`に本物の`KeyEventArguments`を渡し、Escape・↑↓/j/k・Shift+←→・Enter・e・d・c・l/L/g/T/o・Delete・Cmd/Ctrl+Aを画面状態ごとの判断表で網羅。`keyboard.py`は8%→99%。変異テスト6本すべて検出
+- 画面テストの土台: NiceGUIの`user`フィクスチャ(ブラウザ無し)。`pyproject.toml`に`addopts = "-p nicegui.testing.user_plugin"`・`main_file = ""`・`asyncio_mode = "auto"`を追加
+- 小さなリファクタリング(挙動は不変): `main.py`の`build_app()`を、保存先リポジトリを引数で受け取る`build_app_ui(repository, config_repository, holiday_repository)`へ分離し、`build_app()`はそれを呼ぶだけにした(テストで`~/.todoapp`を汚さないため)
+- `test/ui/conftest.py`(`app_env`・`app_user`フィクスチャ)、`test/ui/harness.py`(`AppEnv`・`make_item`・`press`・`click_row`・`double_click_row`・`shows`/`hides`・`click_displayed`・`select_toggle`)、`test/ui/test_app_flows.py`(31件: 表示・絞り込み・新規登録・Tab補完・実行/停止/キャンセル・完了・削除・複数選択・表示日の切り替えと閲覧用・画面切り替え・各ダイアログ)、`test_app_smoke.py`
+- 画面テストの変異テスト8本はすべて検出
+
+**画面テストで分かった`user`シミュレーションの落とし穴(次回以降も有効)**
+- `should_see`/`should_not_see`は、**閉じているダイアログの中身や、非表示の祖先の下の要素も「見える」と判定する**(要素自身の`visible`しか見ない)。そのままだと「ダイアログが開く」テストが空振りで通る。祖先をたどって、閉じた`ui.dialog`・`visible=False`が無いことまで確かめる`shows`/`hides`を使うこと
+- `user.find(text)`は該当が無いと例外を出す。`user.click()`は子のラベルにしか届かず、親の行に付けたクリック処理は呼ばれない(`click_row`で行へ直接送る)
+- 同じ名前のラベルが複数ある(実行中は画面下部のフローティング表示にも出る)。`find`の結果から任意の1つを選ぶと、集合の順序しだいで失敗する不安定なテストになる(実際に起きて修正済み)
+- 1文字のアイテム名(`A`等)はヘルプの`Cmd/Ctrl + A`などにも一致して誤爆する。`ui.toggle`は`user`のクリック非対応なので値を直接設定する。複数のダイアログに同名ボタン(`キャンセル`等)があるため、表示中のものだけを対象にする
+
+**時間の計測**: 逐次は約1.1〜1.4秒(365件時点)で、時間の大半は`nicegui`のimport。`-n auto`は約2.95秒と逆に遅い(ワーカー起動とimportの重複)。画面テストが増えた後で再計測する。画面テスト31件は約9秒
+
+**未完了・次の作業**
+- UI層のカバレッジ強化の続き: `list_view`(編集一覧)・`edit_dialog`・`log_view`・カテゴリ関連ダイアログ・`settings_dialog`の画面テストと、必要に応じた純粋関数への切り出し
+- 全体テスト・mypy strict・カバレッジの再計測と、`-n`の効果の再計測。完了したらコミット(実行前にユーザーへ確認)
+- ユーザー確認済みの方針: `main`への反映(`develop`→`main`のPR)は、指示があるまで作らない
+
 ## 未実施・今後の検討事項
 
-- 新規アイテム名の入力補完(方法1で名前のみがおすすめ。ユーザーの方針待ち)
+- 新規アイテム名の入力補完は、PR #12で`develop`へマージ済み(`Tab`で名前のみ確定、`Enter`は従来どおり登録。手動確認済み)。`main`へは未反映
+- 検討中の要望(未着手): 基準日が未来のとき、保存時に「◯月◯日から表示されます」と通知する。`毎日`にも基準日を持たせるかは未決定。`年次`の種別は取り下げ
 - PR #3(カテゴリ選択の色付け)の`amber`の白文字の読みにくさは、実機で未確認
 - 繰り返しの基準日が無い`毎日`アイテムは、過去へ遡ると常に表示される(基準日・作成日を持たせるかは未決定)
 
@@ -334,3 +363,4 @@ src/todoapp/
 
 - **コミットは実行前に必ずユーザーへ確認を取ること**(以前はタスクの区切りごとに自律的にコミットしていたが、ユーザーからの指示によりこの方針に変更)
 - GUIアプリの動作確認スクリーンショットは、デスクトップ全体ではなく`screencapture -x -D2`でセカンダリモニター(画面2)のみを撮影すること
+- **`main`へのPR(`develop`→`main`)は、ユーザーが指示するまで作成・提案しない**
