@@ -1,6 +1,7 @@
 import json
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -106,3 +107,73 @@ def test_restore_from_backup_writes_main_file_back(tmp_path: Path) -> None:
     loaded = repository.load()
 
     assert [i.name for i in loaded.items] == ["一つ目"]
+
+
+def _write_raw(path: Path, version: int, name: str = "旧") -> None:
+    payload = {
+        "version": version,
+        "items": [{"legacy_name": name}],
+        "records": [],
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def _rename_legacy_name(raw: dict[str, Any]) -> dict[str, Any]:
+    """テスト用の偽の移行: v0の`legacy_name`を、現行の項目へ変換する"""
+    items = [
+        TodoItem(name=i["legacy_name"], schedule_type=ScheduleType.DAILY, anchor_date=date(2026, 8, 24)).to_dict()
+        for i in raw["items"]
+    ]
+    return {**raw, "version": 1, "items": items}
+
+
+def test_load_migrates_old_version_and_keeps_pre_migration_copy(tmp_path: Path) -> None:
+    path = tmp_path / "todos.json"
+    _write_raw(path, version=0, name="移行前")
+    original = path.read_text(encoding="utf-8")
+
+    loaded = JsonTodoRepository(path=path, migrations={0: _rename_legacy_name}).load()
+
+    assert [i.name for i in loaded.items] == ["移行前"]
+    assert (tmp_path / "todos.json.v0.bak").read_text(encoding="utf-8") == original
+
+
+def test_load_applies_migrations_in_order(tmp_path: Path) -> None:
+    path = tmp_path / "todos.json"
+    _write_raw(path, version=-1, name="連鎖")
+    calls: list[int] = []
+
+    def step_minus1(raw: dict[str, Any]) -> dict[str, Any]:
+        calls.append(-1)
+        return {**raw, "version": 0}
+
+    def step0(raw: dict[str, Any]) -> dict[str, Any]:
+        calls.append(0)
+        return _rename_legacy_name(raw)
+
+    loaded = JsonTodoRepository(path=path, migrations={-1: step_minus1, 0: step0}).load()
+
+    assert calls == [-1, 0]
+    assert [i.name for i in loaded.items] == ["連鎖"]
+
+
+def test_load_rejects_newer_version_without_touching_file(tmp_path: Path) -> None:
+    path = tmp_path / "todos.json"
+    _write_raw(path, version=2)
+    original = path.read_text(encoding="utf-8")
+
+    with pytest.raises(UnsupportedSchemaVersionError):
+        JsonTodoRepository(path=path, migrations={0: _rename_legacy_name}).load()
+
+    assert path.read_text(encoding="utf-8") == original
+    assert [p.name for p in tmp_path.iterdir()] == ["todos.json"]
+
+
+def test_load_rejects_old_version_without_migration(tmp_path: Path) -> None:
+    path = tmp_path / "todos.json"
+    _write_raw(path, version=0)
+
+    with pytest.raises(UnsupportedSchemaVersionError):
+        JsonTodoRepository(path=path).load()
+
+    assert path.exists()

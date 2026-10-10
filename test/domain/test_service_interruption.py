@@ -259,16 +259,16 @@ def test_start_saves_alive_time_immediately() -> None:
     assert store.value == _at(DAY1, 9)
 
 
-def test_keep_alive_saves_alive_time_every_ten_seconds_only() -> None:
+def test_keep_alive_saves_alive_time_every_two_seconds_only() -> None:
     service, clock, store, _ = _running(_at(DAY1, 9))
 
-    clock.advance(5)
+    clock.advance(1)
     service.keep_alive()
-    assert store.value == _at(DAY1, 9)  # 10秒未満は書き込まない
+    assert store.value == _at(DAY1, 9)  # 2秒未満は書き込まない
 
-    clock.advance(6)
+    clock.advance(1)
     service.keep_alive()
-    assert store.value == _at(DAY1, 9, 0, 11)
+    assert store.value == _at(DAY1, 9, 0, 2)
 
 
 def test_service_works_without_alive_store() -> None:
