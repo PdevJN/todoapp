@@ -88,3 +88,40 @@ def test_shift_view_date_moves_by_days_in_both_directions() -> None:
     assert state.view_date == date.today() + timedelta(days=1)
     state.shift_view_date(-2)
     assert state.view_date == date.today() - timedelta(days=1)
+
+
+# --- 日跨ぎ(0:00を過ぎたときの表示日の追従) ---------------------------------------------------
+
+
+def test_roll_over_moves_view_date_to_new_today_when_it_was_showing_today() -> None:
+    state = AppState(view_date=date(2026, 10, 10), today_seen=date(2026, 10, 10))
+
+    changed = state.roll_over(date(2026, 10, 11))
+
+    assert changed
+    assert state.view_date == date(2026, 10, 11)
+    assert state.today_seen == date(2026, 10, 11)
+
+
+def test_roll_over_keeps_view_date_when_user_was_browsing_another_day() -> None:
+    state = AppState(view_date=date(2026, 10, 5), today_seen=date(2026, 10, 10))
+
+    changed = state.roll_over(date(2026, 10, 11))
+
+    assert changed
+    assert state.view_date == date(2026, 10, 5)
+
+
+def test_roll_over_does_nothing_on_the_same_day() -> None:
+    state = AppState(view_date=date(2026, 10, 10), today_seen=date(2026, 10, 10))
+
+    assert not state.roll_over(date(2026, 10, 10))
+    assert state.view_date == date(2026, 10, 10)
+
+
+def test_roll_over_follows_several_days_at_once() -> None:
+    state = AppState(view_date=date(2026, 10, 10), today_seen=date(2026, 10, 10))
+
+    state.roll_over(date(2026, 10, 13))
+
+    assert state.view_date == date(2026, 10, 13)

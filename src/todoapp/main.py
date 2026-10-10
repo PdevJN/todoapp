@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime
 
 import httpx
-from nicegui import ui
+from nicegui import app, ui
 from nicegui.events import ValueChangeEventArguments
 
 from todoapp.domain.models import DoneFilter
-from todoapp.domain.service import TodoService
+from todoapp.domain.service import AliveStore, TodoService
+from todoapp.repository.alive_repository import AliveRepository
 from todoapp.repository.config_repository import (
     ConfigRepository,
     WeekStart,
@@ -40,14 +41,17 @@ from todoapp.ui.settings_dialog import SettingsDialog
 
 @ui.page("/")
 def build_app() -> None:
-    build_app_ui(JsonTodoRepository(), ConfigRepository(), HolidayRepository())
+    build_app_ui(JsonTodoRepository(), ConfigRepository(), HolidayRepository(), AliveRepository())
 
 
 def build_app_ui(
-    repository: JsonTodoRepository, config_repository: ConfigRepository, holiday_repository: HolidayRepository
+    repository: JsonTodoRepository,
+    config_repository: ConfigRepository,
+    holiday_repository: HolidayRepository,
+    alive_store: AliveStore | None = None,
 ) -> None:
     """画面を組み立てる。保存先を引数で受け取るのは、テストで`~/.todoapp`を汚さないため。"""
-    service = TodoService(repository)
+    service = TodoService(repository, alive_store=alive_store)
     state = AppState()
 
     config = config_repository.load()
@@ -302,8 +306,20 @@ def build_app_ui(
     keyboard.build()
 
 
+def recover_interrupted_run(repository: JsonTodoRepository, alive_store: AliveStore) -> None:
+    """前回の終了時に実行中のまま残った記録を、最後に動作していた時刻で停止する。
+
+    画面(ページ)を開くたびではなく、アプリの起動時に1回だけ行う(ブラウザの再読み込みで実行中を止めないため)。
+    """
+    TodoService(repository, alive_store=alive_store).recover_interrupted()
+
+
 def main() -> None:
     install_stderr_filter()
+    alive_store = AliveRepository()
+    recover_interrupted_run(JsonTodoRepository(), alive_store)
+    # 正常に終了するときは、終了の直前まで動作していたものとして記録する
+    app.on_shutdown(lambda: alive_store.save(datetime.now()))
     ui.run(native=True, window_size=(620, 720), title="TODO", language="ja", reload=False)
 
 

@@ -249,6 +249,7 @@ class MainView:
         self._refresh_all()
 
     def _tick(self) -> None:
+        self._watch_running()
         self._update_running_indicator()
         running = self._service.running_record()
         if running is None or self._elapsed_label is None:
@@ -256,6 +257,18 @@ class MainView:
         if self._elapsed_item_id == running.item_id:
             self._elapsed_label.set_text(format_duration(running.elapsed_seconds(datetime.now())))
             self._apply_over_estimate_color(self._elapsed_label, running.item_id)
+
+    def _watch_running(self) -> None:
+        """実行中の見守り: 0:00を跨いだ記録の分割、スリープ等で止まっていた場合の停止、表示日の追従。"""
+        suspended = self._service.keep_alive()
+        rolled = self._state.roll_over(date.today())
+        if rolled:
+            # 日付入力も新しい表示日に揃える(変更ハンドラが選択解除と再描画を行う)
+            self._date_input.value = self._state.view_date.isoformat()
+        if suspended:
+            ui.notify("処理が長く止まっていたため、最後に動作していた時刻で実行を停止しました", type="warning")
+        if suspended or rolled:
+            self._refresh_all()
 
     def _apply_over_estimate_color(self, label: ui.label, item_id: str) -> None:
         # 累積経過時間が見積りを超えたら赤、それ以外は通常の強調色で表示する
