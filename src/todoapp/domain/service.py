@@ -31,7 +31,7 @@ class AliveStore(Protocol):
 
 
 # 実行中は、この間隔で生存時刻を保存する(強制終了しても、記録のずれがこの秒数程度に収まる)
-ALIVE_SAVE_INTERVAL_SECONDS = 10
+ALIVE_SAVE_INTERVAL_SECONDS = 2
 # 1秒タイマーの呼び出しがこの秒数より空いたら、スリープ等で処理が止まっていたとみなす
 SUSPEND_GAP_SECONDS = 60
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +12,10 @@ from todoapp.repository.safe_io import atomic_write_text, backup_path, quarantin
 SCHEMA_VERSION = 1
 
 DEFAULT_PATH = Path.home() / ".todoapp" / "todos.json"
+
+# 旧バージョンの辞書を、1つ新しいバージョンの辞書へ変換する関数。キーは変換元のバージョン
+Migration = Callable[[dict[str, Any]], dict[str, Any]]
+MIGRATIONS: dict[int, Migration] = {}
 
 
 class UnsupportedSchemaVersionError(Exception):
@@ -21,13 +27,14 @@ _CORRUPT_ERRORS = (ValueError, KeyError, TypeError, AttributeError)
 
 
 class JsonTodoRepository:
-    def __init__(self, path: Path = DEFAULT_PATH) -> None:
+    def __init__(self, path: Path = DEFAULT_PATH, migrations: Mapping[int, Migration] | None = None) -> None:
         self._path = path
+        self._migrations = MIGRATIONS if migrations is None else migrations
 
     def load(self) -> AppData:
         if self._path.exists():
             try:
-                return self._read(self._path)
+                return self._read(self._path, keep_pre_migration=True)
             except _CORRUPT_ERRORS:
                 quarantine(self._path)
         return self._restore_from_backup()
@@ -46,11 +53,21 @@ class JsonTodoRepository:
         # 壊れたファイルは退避済みなので、空で起動しても内容は失われない
         return AppData(items=[], records=[])
 
-    @staticmethod
-    def _read(path: Path) -> AppData:
+    def _read(self, path: Path, *, keep_pre_migration: bool = False) -> AppData:
         raw: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-        if raw.get("version") != SCHEMA_VERSION:
-            raise UnsupportedSchemaVersionError(raw.get("version"))
+        version = raw.get("version")
+        if not isinstance(version, int) or isinstance(version, bool) or version > SCHEMA_VERSION:
+            raise UnsupportedSchemaVersionError(version)  # 新しい版のファイルは読めないだけなので触らない
+        if version < SCHEMA_VERSION:
+            if version not in self._migrations:
+                raise UnsupportedSchemaVersionError(version)
+            if keep_pre_migration:
+                shutil.copy2(path, path.with_name(f"{self._path.name}.v{version}.bak"))
+            while version < SCHEMA_VERSION:
+                if version not in self._migrations:
+                    raise UnsupportedSchemaVersionError(version)
+                raw = self._migrations[version](raw)
+                version = raw["version"]
         items = [TodoItem.from_dict(item) for item in raw["items"]]
         records = [ExecutionRecord.from_dict(record) for record in raw["records"]]
         categories = [Category.from_dict(category) for category in raw.get("categories", [])]

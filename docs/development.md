@@ -48,7 +48,7 @@ src/todoapp/
 | `~/.todoapp/todos.json` | アイテム(完了日を含む)・実行記録・カテゴリ |
 | `~/.todoapp/config.json` | テーマ設定(`auto`/`light`/`dark`)・週次カレンダーの週の開始曜日・標準労働時間 |
 | `~/.todoapp/holidays.json` | 祝日データのキャッシュ(内閣府CSVから取得) |
-| `~/.todoapp/alive.json` | 実行中の最後に動作していた時刻(約10秒ごとに更新。再起動時の停止時刻に使う) |
+| `~/.todoapp/alive.json` | 実行中の最後に動作していた時刻(約2秒ごとに更新。再起動時の停止時刻に使う) |
 
 ## キー操作を追加するとき
 
