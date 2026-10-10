@@ -139,6 +139,7 @@
 - 完了かどうかの判定は`domain/models.py`の`is_done()`に集約する。メインパネルの絞り込み・`d`キー・取り消し線の表示はすべてこの判定を通すこと
 - 画面の言語は日本語で、`main.py`の`ui.run(language="ja")`でQuasar標準コンポーネント(日付・時刻ピッカー、テーブルの文言など)を日本語化している。FullCalendarを使う画面(実行履歴・実行記録の編集)では、optionsに`"locale": "ja"`を指定する(日本語localeは`ui/vendor/fullcalendar/lib/ja.global.min.js`を`fullcalendar.js`が読み込む)。FullCalendarを新たに使う場合も同様にすること
 - `ui/vendor/fullcalendar/`は、NiceGUI公式exampleを元に、ドラッグ&ドロップの通知(`on_change`)・祝日ツールチップ・密着ガイド線などを追加している
+- `TodoService`はアプリ全体で1つを共有する(`main.py`の`_shared_service`)。画面(ウィンドウ・ブラウザのタブ)ごとに作ると、メモリ上のデータが別々になり、後から保存した画面が他の画面の変更を全量上書きで消すため。画面の状態(`AppState`・選択・ダイアログ)は画面ごと。他の画面の変更は、自動では表示に反映されない
 
 ## 開発言語とライブラリ選定
 

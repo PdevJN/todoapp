@@ -39,9 +39,16 @@ from todoapp.ui.record_timeline_dialog import RecordTimelineDialog
 from todoapp.ui.settings_dialog import SettingsDialog
 
 
+# 全ての画面(ウィンドウ・ブラウザのタブ)で共有するサービス。画面ごとに作ると、メモリ上のデータが
+# 画面の数だけ別々になり、後から保存した画面が他の画面の変更を全量上書きで消してしまう
+_shared_service: TodoService | None = None
+
+
 @ui.page("/")
 def build_app() -> None:
-    build_app_ui(JsonTodoRepository(), ConfigRepository(), HolidayRepository(), AliveRepository())
+    build_app_ui(
+        JsonTodoRepository(), ConfigRepository(), HolidayRepository(), AliveRepository(), service=_shared_service
+    )
 
 
 def build_app_ui(
@@ -49,9 +56,14 @@ def build_app_ui(
     config_repository: ConfigRepository,
     holiday_repository: HolidayRepository,
     alive_store: AliveStore | None = None,
+    service: TodoService | None = None,
 ) -> None:
-    """画面を組み立てる。保存先を引数で受け取るのは、テストで`~/.todoapp`を汚さないため。"""
-    service = TodoService(repository, alive_store=alive_store)
+    """画面を組み立てる。保存先を引数で受け取るのは、テストで`~/.todoapp`を汚さないため。
+
+    `service`を渡すと、複数の画面でデータを共有する。省略した場合は、この画面専用に作る。
+    """
+    if service is None:
+        service = TodoService(repository, alive_store=alive_store)
     state = AppState()
 
     config = config_repository.load()
@@ -306,18 +318,21 @@ def build_app_ui(
     keyboard.build()
 
 
-def recover_interrupted_run(repository: JsonTodoRepository, alive_store: AliveStore) -> None:
+def recover_interrupted_run(repository: JsonTodoRepository, alive_store: AliveStore) -> TodoService:
     """前回の終了時に実行中のまま残った記録を、最後に動作していた時刻で停止する。
 
     画面(ページ)を開くたびではなく、アプリの起動時に1回だけ行う(ブラウザの再読み込みで実行中を止めないため)。
     """
-    TodoService(repository, alive_store=alive_store).recover_interrupted()
+    service = TodoService(repository, alive_store=alive_store)
+    service.recover_interrupted()
+    return service
 
 
 def main() -> None:
     install_stderr_filter()
     alive_store = AliveRepository()
-    recover_interrupted_run(JsonTodoRepository(), alive_store)
+    global _shared_service
+    _shared_service = recover_interrupted_run(JsonTodoRepository(), alive_store)
     # 正常に終了するときは、終了の直前まで動作していたものとして記録する
     app.on_shutdown(lambda: alive_store.save(datetime.now()))
     ui.run(native=True, window_size=(620, 720), title="TODO", language="ja", reload=False)
