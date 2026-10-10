@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from todoapp.repository.safe_io import atomic_write_text, quarantine
+
 Theme = Literal["auto", "light", "dark"]
 WeekStart = Literal["sunday", "monday"]
 
@@ -62,7 +64,13 @@ class ConfigRepository:
     def load(self) -> AppConfig:
         if not self._path.exists():
             return AppConfig()
-        raw: dict[str, Any] = json.loads(self._path.read_text(encoding="utf-8"))
+        try:
+            raw: dict[str, Any] = json.loads(self._path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise ValueError("config must be an object")
+        except ValueError:
+            quarantine(self._path)
+            return AppConfig()
         return AppConfig(
             theme=_parse_theme(raw.get("theme")),
             week_start=_parse_week_start(raw.get("week_start")),
@@ -70,10 +78,9 @@ class ConfigRepository:
         )
 
     def save(self, config: AppConfig) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "theme": config.theme,
             "week_start": config.week_start,
             "standard_work_hours": config.standard_work_hours,
         }
-        self._path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_text(self._path, json.dumps(payload, ensure_ascii=False, indent=2))

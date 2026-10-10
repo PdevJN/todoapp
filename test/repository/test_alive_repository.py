@@ -32,3 +32,10 @@ def test_load_returns_none_for_broken_content(tmp_path: Path, content: str) -> N
     path.write_text(content, encoding="utf-8")
 
     assert AliveRepository(path).load() is None
+
+
+def test_save_leaves_no_temp_file(tmp_path: Path) -> None:
+    from datetime import datetime
+
+    AliveRepository(path=tmp_path / "alive.json").save(datetime(2026, 10, 10, 9, 0, 0))
+    assert [p.name for p in tmp_path.iterdir()] == ["alive.json"]

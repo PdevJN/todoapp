@@ -129,6 +129,8 @@
 - アイテム(完了日を含む)・実行記録・カテゴリは`~/.todoapp/todos.json`に保存する
 - テーマ・週表示の開始曜日・標準労働時間は`~/.todoapp/config.json`、祝日データのキャッシュは`~/.todoapp/holidays.json`、実行中の生存時刻は`~/.todoapp/alive.json`に保存する
 - 完了状態の絞り込み(`未完了のみ`・`すべて`・`完了のみ`)は保存しない
+- 保存は一時ファイルへ書いてから置き換える(`repository/safe_io.py`)ため、書き込み中に落ちても元のファイルは壊れない。`todos.json`は保存のたびに直前の内容を`todos.json.bak`へ1世代残す
+- 起動時に`todos.json`が壊れていた場合は`todos.json.corrupt-<日時>`へ退避し、`.bak`があればそこから復元して`todos.json`へ書き戻す(無ければ空で起動し、退避したファイルは残る)。`todos.json`が無く`.bak`だけある場合も同様に復元する。`config.json`が壊れていた場合も退避して既定値で起動する
 
 ## 実装上の注意
 

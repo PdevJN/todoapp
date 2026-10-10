@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from todoapp.repository.safe_io import atomic_write_text
+
 DEFAULT_ALIVE_PATH = Path.home() / ".todoapp" / "alive.json"
 
 
@@ -23,5 +25,4 @@ class AliveRepository:
             return None
 
     def save(self, value: datetime) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps({"alive_at": value.isoformat()}), encoding="utf-8")
+        atomic_write_text(self._path, json.dumps({"alive_at": value.isoformat()}))
