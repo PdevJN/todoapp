@@ -8,6 +8,8 @@ from pathlib import Path
 
 import httpx
 
+from todoapp.repository.safe_io import atomic_write_text
+
 CAO_HOLIDAY_CSV_URL = "https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv"
 
 DEFAULT_HOLIDAY_PATH = Path.home() / ".todoapp" / "holidays.json"
@@ -59,4 +61,4 @@ class HolidayRepository:
     def save(self, holidays: dict[date, str]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         payload = {d.isoformat(): name for d, name in holidays.items()}
-        self._path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_text(self._path, json.dumps(payload, ensure_ascii=False, indent=2))

@@ -131,3 +131,13 @@ def test_load_standard_work_hours_boundaries(tmp_path: Path, raw: object, expect
     path.write_text(json.dumps({"standard_work_hours": raw}), encoding="utf-8")
 
     assert ConfigRepository(path=path).load().standard_work_hours == expected
+
+
+def test_load_returns_defaults_and_quarantines_when_corrupt(tmp_path: Path) -> None:
+    path = tmp_path / "config.json"
+    path.write_text("{broken", encoding="utf-8")
+
+    config = ConfigRepository(path=path).load()
+
+    assert config == AppConfig()
+    assert list(tmp_path.glob("config.json.corrupt-*"))
