@@ -33,6 +33,7 @@ pywebviewによるネイティブウィンドウが起動する。
 | `~/.todoapp/todos.json` | アイテム・実行記録・カテゴリ |
 | `~/.todoapp/config.json` | テーマ・週の開始曜日・標準労働時間 |
 | `~/.todoapp/holidays.json` | 祝日データのキャッシュ(内閣府CSV。カレンダー画面のボタンで更新) |
+| `~/.todoapp/alive.json` | 実行中の最後に動作していた時刻(アプリが終了した場合の停止時刻に使う) |
 
 ## キーボード操作
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from typing import NamedTuple, Protocol
 
 from todoapp.domain.models import (
@@ -23,6 +23,19 @@ class TodoRepository(Protocol):
     def save(self, data: AppData) -> None: ...
 
 
+class AliveStore(Protocol):
+    """実行中の「最後に動作していた時刻」の保存先。アプリの終了後に、実行を止める時刻として使う。"""
+
+    def load(self) -> datetime | None: ...
+    def save(self, value: datetime) -> None: ...
+
+
+# 実行中は、この間隔で生存時刻を保存する(強制終了しても、記録のずれがこの秒数程度に収まる)
+ALIVE_SAVE_INTERVAL_SECONDS = 10
+# 1秒タイマーの呼び出しがこの秒数より空いたら、スリープ等で処理が止まっていたとみなす
+SUSPEND_GAP_SECONDS = 60
+
+
 class ItemGapRow(NamedTuple):
     """アイテムごとの集計1行分。累積・見積り・GAPは、削除済みアイテムや見積り未設定の場合`None`。"""
 
@@ -40,9 +53,13 @@ class TodoService:
         self,
         repository: TodoRepository,
         clock: Callable[[], datetime] = datetime.now,
+        alive_store: AliveStore | None = None,
     ) -> None:
         self._repository = repository
         self._clock = clock
+        self._alive_store = alive_store
+        self._last_tick: datetime | None = None
+        self._alive_saved_at: datetime | None = None
         self._data = repository.load()
 
     @property
@@ -134,10 +151,67 @@ class TodoService:
     def start(self, item_id: str) -> None:
         item = self._find_item(item_id)
         self.stop_running()
-        self._data.records.append(
-            ExecutionRecord(item_id=item.id, item_name=item.name, start_time=self._clock())
-        )
+        now = self._clock()
+        self._data.records.append(ExecutionRecord(item_id=item.id, item_name=item.name, start_time=now))
         self._save()
+        # 停止中の空白(スリープ等)を中断と取り違えないよう、開始時点から数え直す
+        self._touch_alive(now, force=True)
+
+    def recover_interrupted(self) -> None:
+        """前回の終了時に実行中のまま残った記録を、最後に動作していた時刻で停止する(起動時に1回呼ぶ)。"""
+        running = self.running_record()
+        if running is None:
+            return
+        alive = self._alive_store.load() if self._alive_store is not None else None
+        # 生存時刻が無い・開始より前の場合は開始時刻で、未来の場合は現在で閉じる
+        end = running.start_time if alive is None else max(min(alive, self._clock()), running.start_time)
+        self._close_at(running, end)
+        self._save()
+
+    def keep_alive(self) -> bool:
+        """実行中の見守り(1秒タイマーから呼ぶ)。0:00を跨いだ記録を分割して継続し、生存時刻を保存する。
+
+        スリープ等で呼び出しが長く空いていた場合は、最後に動作していた時刻で停止して`True`を返す。
+        """
+        now = self._clock()
+        running = self.running_record()
+        if running is None:
+            self._last_tick = now
+            return False
+        last = self._last_tick
+        if last is not None and (now - last).total_seconds() > SUSPEND_GAP_SECONDS:
+            self._close_at(running, last)
+            self._save()
+            return True
+        if self._split_at_midnights(running, now) is not running:
+            self._save()
+        self._touch_alive(now)
+        return False
+
+    def _touch_alive(self, now: datetime, *, force: bool = False) -> None:
+        self._last_tick = now
+        if self._alive_store is None:
+            return
+        saved_at = self._alive_saved_at
+        if force or saved_at is None or (now - saved_at).total_seconds() >= ALIVE_SAVE_INTERVAL_SECONDS:
+            self._alive_store.save(now)
+            self._alive_saved_at = now
+
+    def _close_at(self, record: ExecutionRecord, end: datetime) -> None:
+        """記録を`end`で閉じる。0:00を跨ぐ場合は日ごとに分割する。"""
+        end = max(end, record.start_time)
+        self._split_at_midnights(record, end).end_time = end
+
+    def _split_at_midnights(self, record: ExecutionRecord, until: datetime) -> ExecutionRecord:
+        """`until`より前の0:00で記録を日ごとに分割し、`until`と同じ日の最後の記録を返す(終了時刻は未設定)。"""
+        while True:
+            boundary = datetime.combine(record.start_time.date() + timedelta(days=1), time.min)
+            if boundary >= until:
+                return record
+            rest = ExecutionRecord(item_id=record.item_id, item_name=record.item_name, start_time=boundary)
+            record.end_time = boundary
+            self._data.records.insert(self._data.records.index(record) + 1, rest)
+            record = rest
 
     def stop_running(self) -> None:
         record = self.running_record()
