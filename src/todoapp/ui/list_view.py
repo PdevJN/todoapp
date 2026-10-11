@@ -50,7 +50,7 @@ class ListView:
                 row_key="id",
                 selection="multiple",
                 on_select=self._on_select,
-            )
+            ).classes("w-full")
             # QTableは既定でチェックボックス以外の行クリックでは選択されないため、
             # 行のどこをクリックしても選択できるようにrowClickでも選択状態を反映する
             self.table.on("rowClick", self._on_row_click, args=[[], ["id"]])
@@ -58,9 +58,9 @@ class ListView:
             self.table.add_slot(
                 "body-cell-name",
                 r"""
-                <q-td :props="props">
+                <q-td :props="props" style="white-space: normal">
                     <div class="row items-center q-gutter-x-sm">
-                        <span :style="props.row.done ? 'text-decoration: line-through; color: #9e9e9e' : ''">{{ props.row.name }}</span>
+                        <span style="word-break: break-all" :style="props.row.done ? 'text-decoration: line-through; color: #9e9e9e' : ''">{{ props.row.name }}</span>
                         <q-badge outline color="primary">{{ props.row.schedule }}</q-badge>
                         <q-badge outline :color="props.row.category_color">
                             <span v-if="props.row.category_expired">❗️</span>{{ props.row.category_label }}

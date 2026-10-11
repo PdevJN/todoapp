@@ -18,7 +18,7 @@ class RecordEditDialog(DialogMixin):
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-80 gap-2"):
             ui.label("実行記録の編集").classes("text-lg font-bold")
-            self._item_label = ui.label().classes("text-sm text-gray-500")
+            self._item_label = ui.label().classes("text-sm text-gray-500 break-all")
             self._start_input = ui.time_input(label="開始時刻").classes("w-full")
             self._start_input.picker.props("mask=HH:mm:ss with-seconds")
             self._end_input = ui.time_input(label="終了時刻").classes("w-full")

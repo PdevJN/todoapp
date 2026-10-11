@@ -38,7 +38,7 @@ class RecordTimelineDialog(DialogMixin):
         # ネイティブウィンドウ(main.pyのwindow_size=(620, 720))に収まるよう、他のダイアログと同程度の幅・高さに抑える
         with ui.dialog() as self.dialog, ui.card().classes("w-[36rem] gap-2"):
             ui.label("実行記録の編集(カレンダー)").classes("text-lg font-bold")
-            self._summary_label = ui.label().classes("text-sm text-gray-500 font-mono")
+            self._summary_label = ui.label().classes("text-sm text-gray-500 font-mono break-all")
             # FullCalendar自体はダークモードに対応していないため、アプリのテーマに関わらず白背景・黒文字で表示する
             with ui.element("div").classes("w-full rounded p-2 bg-white text-black"):
                 self._calendar = FullCalendar(

@@ -164,7 +164,9 @@ class CategorySummaryDialog(DialogMixin):
     def _render_item_row(self, row: ItemGapRow) -> None:
         with ui.row().classes(_ITEM_ROW_CLASSES):
             name_classes = "col font-medium ellipsis" + (f" {DONE_TEXT_CLASSES}" if row.done else "")
-            ui.label(row.name).classes(name_classes)
+            # 長い名前は`...`で省略されるため、マウスオーバーで全文を表示する(作業ログと同じ)
+            with ui.label(row.name).classes(name_classes):
+                ui.tooltip(row.name)
             ui.label(format_duration(row.today_seconds)).classes(_ITEM_NUMBER_CLASSES)
             ui.label(_format_optional(row.cumulative_seconds)).classes(_ITEM_NUMBER_CLASSES)
             ui.label(format_estimate_cell(row.estimate_seconds, row.today_estimate_seconds)).classes(_ITEM_NUMBER_CLASSES)
