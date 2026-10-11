@@ -40,7 +40,13 @@ class EditDialog(DialogMixin):
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-96 gap-2"):
             ui.label("アイテムの編集").classes("text-lg font-bold")
-            self._name_input = ui.input(label="アイテム名").props(f"maxlength={ITEM_NAME_MAX_LENGTH}").classes("w-full")
+            # 長い名前が入力欄に収まらないよう、折り返して高さが伸びるテキストエリアにする(改行は入力させない)
+            self._name_input = (
+                ui.textarea(label="アイテム名")
+                .props(f"autogrow rows=1 maxlength={ITEM_NAME_MAX_LENGTH}")
+                .classes("w-full")
+            )
+            self._name_input.on("keydown.enter.prevent", lambda: None)
             self._schedule_select = ui.select(
                 SCHEDULE_LABELS,
                 label="実行の曜日",
