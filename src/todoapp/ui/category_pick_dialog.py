@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from nicegui import ui
 
+from todoapp.domain.models import CATEGORY_NAME_MAX_LENGTH, validate_category_fields
 from todoapp.domain.service import TodoService
 from todoapp.ui.dialog_base import DialogMixin
 
@@ -19,7 +20,7 @@ class CategoryPickDialog(DialogMixin):
             ui.label("カテゴリを選択").classes("text-lg font-bold")
             self.category_container = ui.column().classes("w-full gap-1")
             with ui.row().classes("w-full items-center gap-2"):
-                self._new_category_input = ui.input(placeholder="新しいカテゴリ名").classes("flex-grow")
+                self._new_category_input = ui.input(placeholder="新しいカテゴリ名").props(f"maxlength={CATEGORY_NAME_MAX_LENGTH}").classes("flex-grow")
                 ui.button("追加", on_click=self._create_and_assign)
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
 
@@ -50,6 +51,12 @@ class CategoryPickDialog(DialogMixin):
     def _create_and_assign(self) -> None:
         name = self._new_category_input.value.strip()
         if not name:
+            return
+        error = validate_category_fields(name=name)
+        if error is None and self._service.is_category_name_taken(name):
+            error = "同じ名前のカテゴリが既にあります"
+        if error is not None:
+            ui.notify(error, type="warning")
             return
         category = self._service.add_category(name)
         self._assign(category.id)

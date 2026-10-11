@@ -6,7 +6,7 @@ from datetime import date
 from nicegui import ui
 from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 
-from todoapp.domain.models import is_category_expired, is_done
+from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, has_control_chars, is_category_expired, is_done
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
@@ -33,7 +33,7 @@ class ListView:
         with root:
             ui.label("編集一覧").classes("text-lg font-bold")
             with ui.row().classes("w-full gap-2 items-end"):
-                self._name_filter = ui.input(label="アイテム名で絞り込み").classes("flex-grow")
+                self._name_filter = ui.input(label="アイテム名で絞り込み").props(f"maxlength={ITEM_NAME_MAX_LENGTH}").classes("flex-grow")
                 self._name_filter.on("keydown.enter", self._apply_name_filter, js_handler=IME_SAFE_ENTER_HANDLER)
                 self._name_filter.on("blur", self._apply_name_filter)
                 self._schedule_filter = ui.select(
@@ -75,6 +75,9 @@ class ListView:
 
     def _apply_name_filter(self) -> None:
         value = (self._name_filter.value or "").strip()
+        if has_control_chars(value):
+            ui.notify("絞り込みに制御文字は使えません", type="warning")
+            return
         if value != self._applied_name_filter:
             self._applied_name_filter = value
             self.render.refresh()

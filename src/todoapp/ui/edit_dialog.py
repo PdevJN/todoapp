@@ -5,7 +5,7 @@ from datetime import date
 
 from nicegui import ui
 
-from todoapp.domain.models import ScheduleType, today_estimate_seconds
+from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, ScheduleType, today_estimate_seconds, validate_item_name
 from todoapp.domain.service import TodoService
 from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.formatting import (
@@ -40,7 +40,7 @@ class EditDialog(DialogMixin):
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-96 gap-2"):
             ui.label("アイテムの編集").classes("text-lg font-bold")
-            self._name_input = ui.input(label="アイテム名").classes("w-full")
+            self._name_input = ui.input(label="アイテム名").props(f"maxlength={ITEM_NAME_MAX_LENGTH}").classes("w-full")
             self._schedule_select = ui.select(
                 SCHEDULE_LABELS,
                 label="実行の曜日",
@@ -142,6 +142,14 @@ class EditDialog(DialogMixin):
     def _save(self) -> None:
         if self._item_id is None:
             return
+        name = self._name_input.value.strip()
+        if not name:
+            ui.notify("アイテム名を入力してください", type="warning")
+            return
+        error = validate_item_name(name)
+        if error is not None:
+            ui.notify(error, type="warning")
+            return
         schedule_type = ScheduleType(self._schedule_select.value)
         anchor_date = (
             date.fromisoformat(self._anchor_input.value)
@@ -150,7 +158,7 @@ class EditDialog(DialogMixin):
         )
         self._service.edit_item(
             self._item_id,
-            name=self._name_input.value.strip(),
+            name=name,
             schedule_type=schedule_type,
             anchor_date=anchor_date,
             estimate_hours=hours_minutes_to_estimate(

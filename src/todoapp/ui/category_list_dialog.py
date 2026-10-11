@@ -6,7 +6,7 @@ from datetime import date
 from nicegui import ui
 from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 
-from todoapp.domain.models import Category
+from todoapp.domain.models import CATEGORY_NAME_MAX_LENGTH, Category, validate_category_fields
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
 from todoapp.ui.dialog_base import DialogMixin
@@ -70,9 +70,9 @@ class CategoryListDialog(DialogMixin):
                 </q-td>
                 """,
             )
-            self._new_category_input = ui.input(placeholder="新しいカテゴリ名を入力してEnter(Shift+Enterで種別入力)").classes(
-                "w-full"
-            )
+            self._new_category_input = ui.input(placeholder="新しいカテゴリ名を入力してEnter(Shift+Enterで種別入力)").props(
+                f"maxlength={CATEGORY_NAME_MAX_LENGTH}"
+            ).classes("w-full")
             self._new_category_input.on(
                 "keydown.enter.exact", self._add_category, js_handler=IME_SAFE_ENTER_HANDLER
             )
@@ -119,6 +119,12 @@ class CategoryListDialog(DialogMixin):
         assert self._new_category_input is not None
         name = self._new_category_input.value.strip()
         if not name:
+            return None
+        error = validate_category_fields(name=name)
+        if error is None and self._service.is_category_name_taken(name):
+            error = "同じ名前のカテゴリが既にあります"
+        if error is not None:
+            ui.notify(error, type="warning")
             return None
         category = self._service.add_category(name)
         self._new_category_input.value = ""

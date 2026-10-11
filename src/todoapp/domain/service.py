@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta
 from typing import NamedTuple, Protocol
 
 from todoapp.domain.models import (
+    UNCATEGORIZED_NAME,
     AppData,
     Category,
     DoneFilter,
@@ -352,6 +353,12 @@ class TodoService:
         ids = set(record_ids)
         self._data.records = [r for r in self._data.records if r.id not in ids]
         self._save()
+
+    def is_category_name_taken(self, name: str, exclude_id: str | None = None) -> bool:
+        """同名のカテゴリ(または予約名「未定」)が既にあるか。編集中のカテゴリは`exclude_id`で除く。"""
+        if name == UNCATEGORIZED_NAME:
+            return True
+        return any(c.name == name and c.id != exclude_id for c in self._data.categories)
 
     def add_category(self, name: str, kind: str = "", expiry_date: date | None = None) -> Category:
         category = Category(name=name, kind=kind, expiry_date=expiry_date)

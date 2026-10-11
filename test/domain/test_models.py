@@ -255,3 +255,30 @@ def test_todo_item_roundtrips_today_estimate_and_loads_legacy_data() -> None:
     loaded = TodoItem.from_dict(legacy)
     assert loaded.today_estimate_hours == 0.0
     assert loaded.today_estimate_date is None
+
+
+def test_validate_category_fields() -> None:
+    from todoapp.domain.models import validate_category_fields
+
+    assert validate_category_fields("仕事", "業務", "PRJ-001_a.b") is None
+    assert validate_category_fields("あ" * 30) is None
+    assert validate_category_fields("あ" * 31) is not None
+    assert validate_category_fields(kind="あ" * 21) is not None
+    assert validate_category_fields(prj_code="A" * 21) is not None
+    assert validate_category_fields("a\tb") is not None
+    assert validate_category_fields("a\nb") is not None
+    assert validate_category_fields("a​b") is not None
+    assert validate_category_fields(prj_code="PRJ 001") is not None
+    assert validate_category_fields(prj_code="ＰＲＪ") is not None
+    assert validate_category_fields(prj_code="") is None
+
+
+def test_validate_item_name() -> None:
+    from todoapp.domain.models import validate_item_name
+
+    assert validate_item_name("資料作成") is None
+    assert validate_item_name("あ" * 50) is None
+    assert validate_item_name("あ" * 51) is not None
+    assert validate_item_name("a\tb") is not None
+    assert validate_item_name("a\nb") is not None
+    assert validate_item_name("a​b") is not None

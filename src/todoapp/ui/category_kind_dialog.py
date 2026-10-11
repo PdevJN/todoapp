@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from nicegui import ui
 
+from todoapp.domain.models import CATEGORY_KIND_MAX_LENGTH, validate_category_fields
 from todoapp.domain.service import TodoService
 from todoapp.ui.dialog_base import DialogMixin
 
@@ -17,7 +18,7 @@ class CategoryKindDialog(DialogMixin):
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-80 gap-2"):
             ui.label("種別を入力").classes("text-lg font-bold")
-            self._kind_input = ui.input(label="種別").classes("w-full")
+            self._kind_input = ui.input(label="種別").props(f"maxlength={CATEGORY_KIND_MAX_LENGTH}").classes("w-full")
             with ui.row().classes("w-full justify-end gap-2"):
                 ui.button("閉じる", on_click=self.dialog.close).props("flat")
                 ui.button("保存", on_click=self._save)
@@ -36,10 +37,15 @@ class CategoryKindDialog(DialogMixin):
         category = next((c for c in self._service.categories if c.id == self._category_id), None)
         if category is None:
             return
+        kind = self._kind_input.value.strip()
+        error = validate_category_fields(kind=kind)
+        if error is not None:
+            ui.notify(error, type="warning")
+            return
         self._service.edit_category(
             self._category_id,
             name=category.name,
-            kind=self._kind_input.value.strip(),
+            kind=kind,
             expiry_date=category.expiry_date,
             color=category.color,
             prj_code=category.prj_code,

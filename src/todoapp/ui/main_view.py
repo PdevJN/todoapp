@@ -8,7 +8,7 @@ from nicegui.elements.dark_mode import DarkMode
 from nicegui.elements.fab import FabAction
 from nicegui.events import GenericEventArguments, SortableEventArguments, ValueChangeEventArguments
 
-from todoapp.domain.models import DoneFilter, ScheduleType, TodoItem, is_category_expired, is_done, matches_done_filter, today_estimate_seconds
+from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, DoneFilter, ScheduleType, TodoItem, is_category_expired, is_done, matches_done_filter, today_estimate_seconds, validate_item_name
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
@@ -98,7 +98,7 @@ class MainView:
             self._new_item_input = ui.input(
                 placeholder="新しいアイテムを入力してEnter(Shift+Enterでカテゴリ選択)",
                 autocomplete=self._service.item_name_candidates(),
-            ).classes("w-full")
+            ).props(f"maxlength={ITEM_NAME_MAX_LENGTH}").classes("w-full")
             self._new_item_input.on("keydown.enter.exact", self._add_item, js_handler=IME_SAFE_ENTER_HANDLER)
             self._new_item_input.on(
                 "keydown.enter.shift", self._add_item_and_pick_category, js_handler=IME_SAFE_ENTER_HANDLER
@@ -125,6 +125,10 @@ class MainView:
         assert self._new_item_input is not None
         name = self._new_item_input.value.strip()
         if not name:
+            return None
+        error = validate_item_name(name)
+        if error is not None:
+            ui.notify(error, type="warning")
             return None
         item = self._service.add_item(name, ScheduleType.ONE_TIME, date.today())
         self._new_item_input.value = ""
