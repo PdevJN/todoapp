@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import calendar
 import random
+import re
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -15,6 +17,14 @@ class ScheduleType(str, Enum):
     MONTHLY = "monthly"
     ONE_TIME = "one_time"
 
+
+# カテゴリの入力文字数の上限と、予約名(カテゴリ未設定の表示名)
+ITEM_NAME_MAX_LENGTH = 50
+CATEGORY_NAME_MAX_LENGTH = 30
+CATEGORY_KIND_MAX_LENGTH = 20
+CATEGORY_PRJ_CODE_MAX_LENGTH = 20
+UNCATEGORIZED_NAME = "未定"
+_PRJ_CODE_PATTERN = re.compile(r"[A-Za-z0-9_.\-]*")
 
 CATEGORY_COLORS = [
     "red",
@@ -60,6 +70,39 @@ class Category:
             color=data.get("color") or random.choice(CATEGORY_COLORS),
             prj_code=data.get("prj_code", ""),
         )
+
+
+def has_control_chars(text: str) -> bool:
+    # 制御文字(Cc)・書式制御文字(Cf: ゼロ幅文字など)・行/段落区切り(Zl・Zp)を禁止する
+    return any(unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") for ch in text)
+
+
+def validate_item_name(name: str) -> str | None:
+    """アイテム名を検証する。問題があればその内容(表示用メッセージ)を、無ければNoneを返す。"""
+    if has_control_chars(name):
+        return "アイテム名に制御文字は使えません"
+    if len(name) > ITEM_NAME_MAX_LENGTH:
+        return f"アイテム名は{ITEM_NAME_MAX_LENGTH}文字以内で入力してください"
+    return None
+
+
+def validate_category_fields(name: str | None = None, kind: str | None = None, prj_code: str | None = None) -> str | None:
+    """カテゴリの入力値を検証する。問題があればその内容(表示用メッセージ)を、無ければNoneを返す。
+    検証するのは渡された項目だけ。呼び出し側で前後の空白を除いた値を渡す。"""
+    for label, value, limit in (
+        ("カテゴリ名", name, CATEGORY_NAME_MAX_LENGTH),
+        ("種別", kind, CATEGORY_KIND_MAX_LENGTH),
+        ("PRJコード", prj_code, CATEGORY_PRJ_CODE_MAX_LENGTH),
+    ):
+        if value is None:
+            continue
+        if has_control_chars(value):
+            return f"{label}に制御文字は使えません"
+        if len(value) > limit:
+            return f"{label}は{limit}文字以内で入力してください"
+    if prj_code is not None and not _PRJ_CODE_PATTERN.fullmatch(prj_code):
+        return "PRJコードは半角英数字と - _ . のみ使えます"
+    return None
 
 
 def is_category_expired(category: Category, today: date) -> bool:

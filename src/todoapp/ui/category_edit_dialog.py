@@ -5,7 +5,13 @@ from datetime import date
 
 from nicegui import ui
 
-from todoapp.domain.models import CATEGORY_COLORS
+from todoapp.domain.models import (
+    CATEGORY_COLORS,
+    CATEGORY_KIND_MAX_LENGTH,
+    CATEGORY_NAME_MAX_LENGTH,
+    CATEGORY_PRJ_CODE_MAX_LENGTH,
+    validate_category_fields,
+)
 from todoapp.domain.service import TodoService
 from todoapp.ui.confirm_dialog import ConfirmDialog
 from todoapp.ui.dialog_base import DialogMixin
@@ -30,9 +36,9 @@ class CategoryEditDialog(DialogMixin):
             ui.label("カテゴリの編集").classes("text-lg font-bold")
             with ui.row().classes("items-center gap-2"):
                 self._color_badge = ui.badge("").props("outline")
-                self._name_input = ui.input(label="カテゴリ名").classes("flex-grow")
-            self._kind_input = ui.input(label="種別").classes("w-full")
-            self._prj_code_input = ui.input(label="PRJコード").classes("w-full")
+                self._name_input = ui.input(label="カテゴリ名").props(f"maxlength={CATEGORY_NAME_MAX_LENGTH}").classes("flex-grow")
+            self._kind_input = ui.input(label="種別").props(f"maxlength={CATEGORY_KIND_MAX_LENGTH}").classes("w-full")
+            self._prj_code_input = ui.input(label="PRJコード").props(f"maxlength={CATEGORY_PRJ_CODE_MAX_LENGTH}").classes("w-full")
             self._expiry_input = ui.input(label="有効期限日").props("type=date").classes("w-full")
             ui.label("カラー").classes("text-sm text-gray-500 -mb-1")
             with ui.row().classes("gap-1"):
@@ -71,14 +77,26 @@ class CategoryEditDialog(DialogMixin):
     def _save(self) -> None:
         if self._category_id is None:
             return
+        name = self._name_input.value.strip()
+        if not name:
+            ui.notify("カテゴリ名を入力してください", type="warning")
+            return
+        kind = self._kind_input.value.strip()
+        prj_code = self._prj_code_input.value.strip()
+        error = validate_category_fields(name, kind, prj_code)
+        if error is None and self._service.is_category_name_taken(name, exclude_id=self._category_id):
+            error = "同じ名前のカテゴリが既にあります"
+        if error is not None:
+            ui.notify(error, type="warning")
+            return
         expiry_date = date.fromisoformat(self._expiry_input.value) if self._expiry_input.value else None
         self._service.edit_category(
             self._category_id,
-            name=self._name_input.value.strip(),
-            kind=self._kind_input.value.strip(),
+            name=name,
+            kind=kind,
             expiry_date=expiry_date,
             color=self._selected_color,
-            prj_code=self._prj_code_input.value.strip(),
+            prj_code=prj_code,
         )
         self.dialog.close()
         self._refresh_all()

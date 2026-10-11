@@ -1165,3 +1165,12 @@ def test_item_name_candidates_skip_empty_names_and_follow_renames() -> None:
     service.add_item("", ScheduleType.DAILY, date(2026, 8, 30))
 
     assert service.item_name_candidates() == ["新名"]
+
+
+def test_is_category_name_taken() -> None:
+    service, _, _ = _service()
+    category = service.add_category("仕事")
+    assert service.is_category_name_taken("仕事")
+    assert not service.is_category_name_taken("仕事", exclude_id=category.id)
+    assert service.is_category_name_taken("未定")
+    assert not service.is_category_name_taken("趣味")
