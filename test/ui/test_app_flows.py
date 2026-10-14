@@ -110,6 +110,71 @@ async def test_work_balance_is_hidden_without_today_estimates(app_user: User, ap
     await hides(app_user, "超過")
 
 
+async def test_shift_s_skips_repeating_item_and_hides_it_by_default(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("毎日の用事"), make_item("残る用事")])
+    await app_user.open("/")
+    click_row(app_user, "毎日の用事")
+
+    await press(app_user, "S", shift=True)
+
+    await hides(app_user, "毎日の用事")
+    await shows(app_user, "残る用事")
+    [skipped, _] = app_env.todos().items
+    assert skipped.skip_date == TODAY
+
+
+async def test_skipped_item_is_visible_with_badge_in_all_and_skipped_filters(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("スキップ済み", skip_date=TODAY), make_item("通常")])
+    await app_user.open("/")
+    await hides(app_user, "スキップ済み")
+
+    select_toggle(app_user, "すべて")
+    await shows(app_user, "スキップ済み")
+    await shows(app_user, "通常")
+    await shows(app_user, "スキップ")  # バッジ
+
+    select_toggle(app_user, "スキップのみ")
+    await shows(app_user, "スキップ済み")
+    await hides(app_user, "通常")
+
+
+async def test_shift_s_again_unskips_the_item(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("スキップ済み", skip_date=TODAY)])
+    await app_user.open("/")
+    select_toggle(app_user, "スキップのみ")
+    await shows(app_user, "スキップ済み")
+    click_row(app_user, "スキップ済み")
+
+    await press(app_user, "S", shift=True)
+
+    await hides(app_user, "スキップ済み")  # スキップのみの絞り込みから外れる
+    assert app_env.todos().items[0].skip_date is None
+
+
+async def test_shift_s_on_non_repeating_item_warns_and_does_nothing(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("今日だけ", ScheduleType.ONE_TIME)])
+    await app_user.open("/")
+    click_row(app_user, "今日だけ")
+
+    await press(app_user, "S", shift=True)
+
+    await app_user.should_see("スキップできるのは、毎日・週次・月次のアイテムです")
+    assert app_env.todos().items[0].skip_date is None
+    await shows(app_user, "今日だけ")
+
+
+async def test_work_balance_ignores_skipped_items_estimates(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(
+        items=[
+            make_item("やる", today_estimate_hours=3.0, today_estimate_date=TODAY),
+            make_item("やらない", today_estimate_hours=2.0, today_estimate_date=TODAY, skip_date=TODAY),
+        ]
+    )
+    await app_user.open("/")
+
+    await shows(app_user, "残り 5時間")  # 8 - 3(スキップ中の2は除く)
+
+
 async def test_main_panel_hides_done_items_by_default(app_user: User, app_env: AppEnv) -> None:
     app_env.seed(items=[make_item("終わった", ScheduleType.ONE_TIME, done_date=TODAY), make_item("これから")])
     await app_user.open("/")

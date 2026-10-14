@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta
 from typing import NamedTuple, Protocol
 
 from todoapp.domain.models import (
+    REPEATING_SCHEDULES,
     UNCATEGORIZED_NAME,
     AppData,
     Category,
@@ -14,6 +15,7 @@ from todoapp.domain.models import (
     TodoItem,
     is_done,
     is_due_today,
+    is_skipped,
     matches_done_filter,
     today_estimate_seconds,
 )
@@ -280,6 +282,8 @@ class TodoService:
         for item in self._data.items:
             if item.id in ids:
                 item.done_date = today if done else None
+                if done:
+                    item.skip_date = None  # 完了とスキップは両立しない
         running = self.running_record()
         if done and running is not None and running.item_id in ids:
             self.stop_running()
@@ -292,6 +296,30 @@ class TodoService:
         items = [item for item in self._data.items if item.id in ids]
         all_done = bool(items) and all(is_done(item, today) for item in items)
         self.set_done(ids, not all_done, today)
+
+    def set_skipped(self, item_ids: Iterable[str], skipped: bool, today: date) -> None:
+        """繰り返し(毎日・週次・月次)のアイテムを、その日だけスキップ(または解除)する。実行中なら停止する。"""
+        ids = set(item_ids)
+        for item in self._data.items:
+            if item.id in ids and item.schedule_type in REPEATING_SCHEDULES:
+                item.skip_date = today if skipped else None
+                if skipped:
+                    item.done_date = None  # 完了とスキップは両立しない
+        running = self.running_record()
+        if skipped and running is not None and running.item_id in ids:
+            self.stop_running()
+            return
+        self._save()
+
+    def toggle_skipped(self, item_ids: Iterable[str], today: date) -> bool:
+        """1件でも未スキップがあれば全てスキップに、全てスキップ済みなら全て解除する。対象(繰り返し)が無ければ何もせず`False`。"""
+        ids = set(item_ids)
+        items = [item for item in self._data.items if item.id in ids and item.schedule_type in REPEATING_SCHEDULES]
+        if not items:
+            return False
+        all_skipped = all(is_skipped(item, today) for item in items)
+        self.set_skipped({item.id for item in items}, not all_skipped, today)
+        return True
 
     def cumulative_seconds(self, item_id: str) -> float:
         now = self._clock()
@@ -318,10 +346,10 @@ class TodoService:
         return max(estimate - self.today_total_seconds(item_id, today), 0.0)
 
     def today_estimate_total_seconds(self, today: date, exclude_item_id: str | None = None) -> int:
-        """本日の実行対象アイテムの、有効な限定見積り(完了済みも含む)の合計。編集中のアイテムは除外できる。"""
+        """本日の実行対象アイテムの、有効な限定見積り(完了済みも含む。スキップ中は除く)の合計。編集中のアイテムは除外できる。"""
         total = 0
         for item in self.items_due_today(today):
-            if item.id == exclude_item_id:
+            if item.id == exclude_item_id or is_skipped(item, today):
                 continue
             total += today_estimate_seconds(item, today) or 0
         return total

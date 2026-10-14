@@ -6,7 +6,7 @@ from datetime import date
 from nicegui import ui
 from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 
-from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, ScheduleType, has_control_chars, is_category_expired, is_done
+from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, ScheduleType, has_control_chars, is_category_expired, is_done, is_skipped
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
@@ -60,8 +60,9 @@ class ListView:
                 r"""
                 <q-td :props="props" style="white-space: normal">
                     <div class="row items-center q-gutter-x-sm">
-                        <span style="word-break: break-all" :style="props.row.done ? 'text-decoration: line-through; color: #9e9e9e' : ''">{{ props.row.name }}</span>
+                        <span style="word-break: break-all" :style="props.row.done ? 'text-decoration: line-through; color: #9e9e9e' : props.row.skipped ? 'color: #9e9e9e' : ''">{{ props.row.name }}</span>
                         <q-badge outline color="primary">{{ props.row.schedule }}</q-badge>
+                        <q-badge v-if="props.row.skipped" outline color="grey">スキップ</q-badge>
                         <q-badge outline :color="props.row.category_color">
                             <span v-if="props.row.category_expired">❗️</span>{{ props.row.category_label }}
                         </q-badge>
@@ -150,6 +151,7 @@ class ListView:
                     "id": item.id,
                     "name": item.name,
                     "done": is_done(item, today),
+                    "skipped": is_skipped(item, today),
                     "schedule": SCHEDULE_LABELS[item.schedule_type.value],
                     "anchor": "-" if is_undecided else item.anchor_date.strftime("%m/%d"),
                     "cumulative": format_duration(cumulative),

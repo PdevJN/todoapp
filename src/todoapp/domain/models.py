@@ -120,6 +120,7 @@ class TodoItem:
     today_estimate_date: date | None = None  # 限定見積りを設定した日
     category_id: str | None = None
     done_date: date | None = None  # 完了した日(最後に完了にした日)。判定はis_done()を使う
+    skip_date: date | None = None  # スキップした日(繰り返しのアイテムのみ有効)。判定はis_skipped()を使う
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def to_dict(self) -> dict[str, Any]:
@@ -133,12 +134,14 @@ class TodoItem:
             "today_estimate_date": self.today_estimate_date.isoformat() if self.today_estimate_date else None,
             "category_id": self.category_id,
             "done_date": self.done_date.isoformat() if self.done_date else None,
+            "skip_date": self.skip_date.isoformat() if self.skip_date else None,
         }
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> TodoItem:
         done_date = data.get("done_date")
         today_estimate_date = data.get("today_estimate_date")
+        skip_date = data.get("skip_date")
         return TodoItem(
             id=data["id"],
             name=data["name"],
@@ -149,6 +152,7 @@ class TodoItem:
             today_estimate_date=date.fromisoformat(today_estimate_date) if today_estimate_date else None,
             category_id=data.get("category_id"),
             done_date=date.fromisoformat(done_date) if done_date else None,
+            skip_date=date.fromisoformat(skip_date) if skip_date else None,
         )
 
 
@@ -205,6 +209,7 @@ class DoneFilter(str, Enum):
     ACTIVE = "active"
     ALL = "all"
     DONE = "done"
+    SKIPPED = "skipped"
 
 
 def is_done(item: TodoItem, today: date) -> bool:
@@ -214,6 +219,14 @@ def is_done(item: TodoItem, today: date) -> bool:
     if item.schedule_type in (ScheduleType.ONE_TIME, ScheduleType.UNDECIDED):
         return True
     return item.done_date == today
+
+
+REPEATING_SCHEDULES = (ScheduleType.DAILY, ScheduleType.WEEKLY, ScheduleType.MONTHLY)
+
+
+def is_skipped(item: TodoItem, today: date) -> bool:
+    """その日だけスキップ中か。繰り返し(毎日・週次・月次)のみ対象で、スキップした日の翌日には自動で解除される。"""
+    return item.schedule_type in REPEATING_SCHEDULES and item.skip_date == today
 
 
 def today_estimate_seconds(item: TodoItem, today: date) -> int | None:
@@ -228,7 +241,11 @@ def today_estimate_seconds(item: TodoItem, today: date) -> int | None:
 def matches_done_filter(item: TodoItem, today: date, done_filter: DoneFilter) -> bool:
     if done_filter is DoneFilter.ALL:
         return True
-    return is_done(item, today) is (done_filter is DoneFilter.DONE)
+    if done_filter is DoneFilter.SKIPPED:
+        return is_skipped(item, today)
+    if done_filter is DoneFilter.DONE:
+        return is_done(item, today)
+    return not is_done(item, today) and not is_skipped(item, today)
 
 
 def is_due_today(item: TodoItem, today: date) -> bool:
