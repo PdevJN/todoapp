@@ -1248,3 +1248,36 @@ def test_today_estimate_total_excludes_skipped_items() -> None:
     service.toggle_skipped([b.id], today)
 
     assert service.today_estimate_total_seconds(today) == 2 * 3600
+
+
+def test_move_category_to_takes_the_position_of_the_target_category() -> None:
+    service, repository, _ = _service()
+    a, b, c = (service.add_category(name) for name in "ABC")
+
+    service.move_category_to(c.id, a.id)
+    assert [x.name for x in service.categories] == ["C", "A", "B"]
+
+    service.move_category_to(c.id, b.id)  # 下へ移動すると、移動先の位置(末尾)に入る
+    assert [x.name for x in service.categories] == ["A", "B", "C"]
+    assert repository.saved is not None
+
+
+def test_move_category_to_same_category_keeps_order() -> None:
+    service, _, _ = _service()
+    a, b = (service.add_category(name) for name in "AB")
+
+    service.move_category_to(a.id, a.id)
+
+    assert [x.name for x in service.categories] == ["A", "B"]
+
+
+def test_move_category_to_unknown_id_raises_without_changing_order() -> None:
+    service, _, _ = _service()
+    a, b = (service.add_category(name) for name in "AB")
+
+    with pytest.raises(KeyError):
+        service.move_category_to(a.id, "unknown")
+    with pytest.raises(KeyError):
+        service.move_category_to("unknown", a.id)
+
+    assert [x.name for x in service.categories] == ["A", "B"]
