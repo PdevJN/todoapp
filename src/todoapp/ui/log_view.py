@@ -10,7 +10,7 @@ from todoapp.domain.models import Category, ExecutionRecord
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
 from todoapp.ui.dialog_base import DialogMixin
-from todoapp.ui.formatting import DONE_TEXT_CLASSES, format_duration
+from todoapp.ui.formatting import DONE_TEXT_CLASSES, format_duration, format_hhmm
 from todoapp.ui.js_handlers import CLIPBOARD_COPY_HANDLER
 
 _MODE_ORDER = "order"
@@ -68,7 +68,7 @@ class LogView(DialogMixin):
             return
         self._update_copy_text(rows)
         for (total_label, item_labels), (_, seconds, items) in zip(self._category_time_labels, rows):
-            total_label.set_text(format_duration(seconds))
+            total_label.set_text(format_hhmm(seconds))
             for item_label, (_, item_seconds, _) in zip(item_labels, items):
                 item_label.set_text(format_duration(item_seconds))
 
@@ -83,7 +83,7 @@ class LogView(DialogMixin):
     def _update_copy_text(self, rows: list[_CategoryRow]) -> None:
         text = category_durations_text([(category, seconds) for category, seconds, _ in rows])
         self.copy_button.props["data-copy-text"] = text
-        self.copy_button.set_enabled(bool(text))
+        self.copy_button.set_enabled(bool(text.strip()))
 
     def _on_copied(self, e: GenericEventArguments) -> None:
         if e.args:
@@ -209,7 +209,7 @@ class LogView(DialogMixin):
                     ui.label(category.name).classes("font-medium")
                     if category.prj_code:
                         ui.badge(category.prj_code).props("outline")
-            total_label = ui.label(format_duration(seconds)).classes("text-gray-500 font-mono")
+            total_label = ui.label(format_hhmm(seconds)).classes("text-gray-500 font-mono")
             item_labels: list[ui.label] = []
             with ui.tooltip().classes("text-sm"):
                 if not items:
@@ -224,8 +224,12 @@ class LogView(DialogMixin):
 
 
 def category_durations_text(totals: list[tuple[Category | None, float]]) -> str:
-    """登録済みカテゴリの経過時間を画面の並び順に1行ずつ並べる(未定は含めない)。"""
-    return "\n".join(format_duration(seconds) for category, seconds in totals if category is not None)
+    """登録済みカテゴリの経過時間(HH:MM)を画面の並び順に1行ずつ並べる(未定は含めない)。
+
+    表示が`00:00`になる(記録が無い、または30秒未満の)カテゴリは、並びがずれないよう空行にする。
+    """
+    durations = (format_hhmm(seconds) for category, seconds in totals if category is not None)
+    return "\n".join("" if duration == "00:00" else duration for duration in durations)
 
 
 def _signature(rows: list[_CategoryRow]) -> list[tuple[str | None, list[tuple[str, bool]]]]:

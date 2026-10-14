@@ -28,7 +28,25 @@ def test_category_durations_text_lists_durations_line_by_line_in_order() -> None
 
     text = category_durations_text([(work, 8100), (sales, 0)])
 
-    assert text == "02:15:00\n00:00:00"
+    assert text == "02:15\n"
+
+
+def test_category_durations_text_keeps_empty_line_for_zero_to_preserve_order() -> None:
+    work = Category(name="仕事")
+    sales = Category(name="営業")
+    design = Category(name="設計")
+
+    text = category_durations_text([(work, 3600), (sales, 0), (design, 9000)])
+
+    assert text == "01:00\n\n02:30"
+
+
+def test_category_durations_text_uses_empty_line_for_time_that_rounds_to_zero() -> None:
+    # 30秒未満は表示が00:00になるため、記録が無いカテゴリと同じく空行にする
+    work = Category(name="仕事")
+    sales = Category(name="営業")
+
+    assert category_durations_text([(work, 20), (sales, 29), (work, 30)]) == "\n\n00:01"
 
 
 def test_category_durations_text_excludes_uncategorized() -> None:
@@ -36,7 +54,7 @@ def test_category_durations_text_excludes_uncategorized() -> None:
 
     text = category_durations_text([(work, 60), (None, 1800)])
 
-    assert text == "00:01:00"
+    assert text == "00:01"
 
 
 def test_category_durations_text_is_empty_without_categories() -> None:
@@ -290,7 +308,7 @@ async def test_copy_button_is_only_visible_in_category_mode_and_copies_registere
 
     button = _copy_button(app_user)
     assert button is not None
-    assert button.props["data-copy-text"] == "01:00:00\n00:00:00"  # 未定は含めない
+    assert button.props["data-copy-text"] == "01:00\n"  # 未定は含めない。記録の無いカテゴリは空行
     assert button.enabled
 
 
@@ -318,6 +336,19 @@ async def test_copy_button_is_disabled_without_registered_categories(app_user: U
     button = _copy_button(app_user)
     assert button is not None
     assert button.props["data-copy-text"] == ""
+    assert not button.enabled
+
+
+async def test_copy_button_is_disabled_when_all_categories_have_no_time(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(categories=[Category(name="開発"), Category(name="営業")])
+    await _open_log(app_user)
+
+    select_toggle(app_user, "カテゴリ別")
+    await shows(app_user, "営業")
+
+    button = _copy_button(app_user)
+    assert button is not None
+    assert button.props["data-copy-text"] == "\n"
     assert not button.enabled
 
 
