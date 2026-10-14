@@ -394,6 +394,15 @@ class TodoService:
         self._save()
         return category
 
+    def move_category_to(self, category_id: str, target_id: str) -> None:
+        """カテゴリを、対象カテゴリのいま居る位置へ移動する(`move_item_to`と同じ考え方)。"""
+        category = self._find_category(category_id)
+        target = self._find_category(target_id)
+        target_index = self._data.categories.index(target)
+        self._data.categories.remove(category)
+        self._data.categories.insert(target_index, category)
+        self._save()
+
     def edit_category(
         self, category_id: str, *, name: str, kind: str, expiry_date: date | None, color: str, prj_code: str
     ) -> None:

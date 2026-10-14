@@ -243,7 +243,7 @@ def build_app_ui(
         open_help=help_dialog.open,
         get_standard_work_hours=lambda: config.standard_work_hours,
     )
-    list_view = ListView(service, state)
+    list_view = ListView(service, state, refresh_all=refresh_all)
     edit_dialog = EditDialog(service, refresh_all=refresh_all, get_standard_work_hours=lambda: config.standard_work_hours)
     settings_dialog = SettingsDialog(lambda: config.standard_work_hours, _on_standard_work_hours_save)
     record_timeline_dialog = RecordTimelineDialog(service, refresh_all=refresh_all)

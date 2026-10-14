@@ -7,6 +7,7 @@ from datetime import date, timedelta
 
 from nicegui import ui
 from nicegui.testing import User
+from nicegui.testing.user_interaction import UserInteraction
 
 from test.ui.harness import (
     AppEnv,
@@ -21,7 +22,8 @@ from test.ui.harness import (
     select_toggle,
     shows,
 )
-from todoapp.domain.models import ScheduleType
+from todoapp.domain.models import Category, ScheduleType
+from todoapp.ui.vendor.sortable_table.sortable_table import SortableTable
 
 TODAY = date.today()
 TOMORROW = TODAY + timedelta(days=1)
@@ -536,3 +538,51 @@ async def test_dialog_shortcuts_open_their_dialogs(app_user: User, app_env: AppE
 
     await press(app_user, "T", shift=True)
     await shows(app_user, "集計画面")
+
+
+# --- ドラッグ&ドロップの並べ替え(表の行) -------------------------------------------------
+
+
+def _drop_row(user: User, *, fixed_rows: int, old_index: int, new_index: int) -> None:
+    """表の行のドロップを擬似的に送る(実際のドラッグはブラウザ側のSortableJSが行う)。"""
+    [sortable] = [e for e in user.find(SortableTable).elements if e.props["fixed-rows"] == fixed_rows]
+    UserInteraction(user, {sortable}, None).trigger("reorder", {"old_index": old_index, "new_index": new_index})
+
+
+async def test_dropping_a_row_in_edit_list_reorders_items(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("A"), make_item("B"), make_item("C")])
+    await app_user.open("/")
+    await press(app_user, "Escape")
+    await shows(app_user, "編集一覧")
+
+    _drop_row(app_user, fixed_rows=0, old_index=0, new_index=2)
+
+    assert _names(app_env) == ["B", "C", "A"]
+
+
+async def test_dropping_a_row_in_filtered_edit_list_moves_to_the_target_position(
+    app_user: User, app_env: AppEnv
+) -> None:
+    # 絞り込みで見えない行(基準日が別の日のB)があっても、移動先の位置へ入る
+    app_env.seed(items=[make_item("A"), make_item("B", anchor_date=TOMORROW), make_item("C")])
+    await app_user.open("/")
+    await press(app_user, "Escape")
+    await shows(app_user, "編集一覧")
+
+    _drop_row(app_user, fixed_rows=0, old_index=0, new_index=1)  # 見えているのはA, Cの2行
+
+    assert _names(app_env) == ["B", "C", "A"]
+
+
+async def test_dropping_a_row_in_category_list_reorders_categories_after_fixed_undecided_row(
+    app_user: User, app_env: AppEnv
+) -> None:
+    a, b, c = Category(name="A"), Category(name="B"), Category(name="C")
+    app_env.seed(categories=[a, b, c])
+    await app_user.open("/")
+    await press(app_user, "g")
+    await shows(app_user, "カテゴリ一覧")
+
+    _drop_row(app_user, fixed_rows=1, old_index=1, new_index=3)  # 添字0は固定の「未定」行
+
+    assert [category.name for category in app_env.todos().categories] == ["B", "C", "A"]

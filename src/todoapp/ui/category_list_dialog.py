@@ -11,6 +11,7 @@ from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
 from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
+from todoapp.ui.vendor.sortable_table.sortable_table import SortableTable
 
 UNCATEGORIZED_ID = "__uncategorized__"
 
@@ -49,6 +50,8 @@ class CategoryListDialog(DialogMixin):
                 on_select=self._on_select,
             )
             self.table.on("rowClick", self._on_row_click, args=[[], ["id"]])
+            # 行をドラッグ&ドロップで並べ替える。先頭の「未定」行は固定
+            SortableTable(self.table, self._on_reorder, fixed_rows=1)
             self.table.add_slot(
                 "body-cell-color",
                 r"""
@@ -114,6 +117,14 @@ class CategoryListDialog(DialogMixin):
         # 「未定」は実体を持たないカテゴリのため、選択・編集・削除の対象からは除外する
         self._rendered_ids = [str(row["id"]) for row in rows if row["id"] != UNCATEGORIZED_ID]
         self.table.update_rows(rows, clear_selection=False)
+
+    def _on_reorder(self, old_index: int, new_index: int) -> None:
+        # 表の添字には先頭の固定行(未定)が含まれるため、1つずらして登録済みカテゴリの添字にする
+        ids = self._rendered_ids
+        old, new = old_index - 1, new_index - 1
+        if 0 <= old < len(ids) and 0 <= new < len(ids) and old != new:
+            self._service.move_category_to(ids[old], ids[new])
+        self._refresh_all()
 
     def _add_category(self) -> Category | None:
         assert self._new_category_input is not None

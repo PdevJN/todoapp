@@ -11,6 +11,7 @@ from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
+from todoapp.ui.vendor.sortable_table.sortable_table import SortableTable
 
 COLUMNS = [
     {"name": "name", "label": "アイテム名", "field": "name", "align": "left"},
@@ -21,9 +22,10 @@ COLUMNS = [
 
 
 class ListView:
-    def __init__(self, service: TodoService, state: AppState) -> None:
+    def __init__(self, service: TodoService, state: AppState, refresh_all: Callable[[], None]) -> None:
         self._service = service
         self._state = state
+        self._refresh_all = refresh_all
         self._rendered_ids: list[str] = []
         # 入力途中の文字では絞り込まず、Enter・フォーカス移動で確定した値だけを使う
         self._applied_name_filter = ""
@@ -70,6 +72,8 @@ class ListView:
                 </q-td>
                 """,
             )
+            # 行をドラッグ&ドロップで並べ替える(メインパネルと同じ並び)
+            SortableTable(self.table, self._on_reorder)
             self.render()
         ui.timer(1.0, self._tick)
         return root
@@ -82,6 +86,13 @@ class ListView:
         if value != self._applied_name_filter:
             self._applied_name_filter = value
             self.render.refresh()
+
+    def _on_reorder(self, old_index: int, new_index: int) -> None:
+        # 絞り込みで一部が非表示でも、移動先に居たアイテムの位置へ動かして全体の並びを更新する
+        ids = self._rendered_ids
+        if 0 <= old_index < len(ids) and 0 <= new_index < len(ids) and old_index != new_index:
+            self._service.move_item_to(ids[old_index], ids[new_index])
+        self._refresh_all()
 
     def _on_select(self, e: TableSelectionEventArguments) -> None:
         self._state.select_items({row["id"] for row in e.selection})
