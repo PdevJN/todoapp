@@ -282,3 +282,10 @@ def test_validate_item_name() -> None:
     assert validate_item_name("a\tb") is not None
     assert validate_item_name("a\nb") is not None
     assert validate_item_name("a​b") is not None
+
+
+def test_undecided_item_round_trips_through_dict() -> None:
+    item = _item(ScheduleType.UNDECIDED, date(2026, 8, 30))
+
+    assert TodoItem.from_dict(item.to_dict()).schedule_type is ScheduleType.UNDECIDED
+    assert item.to_dict()["schedule_type"] == "undecided"

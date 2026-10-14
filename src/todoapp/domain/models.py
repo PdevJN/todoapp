@@ -16,6 +16,7 @@ class ScheduleType(str, Enum):
     WEEKLY = "weekly"
     MONTHLY = "monthly"
     ONE_TIME = "one_time"
+    UNDECIDED = "undecided"  # 実行日が決まっていない。どの日にも表示せず、編集一覧でだけ見える
 
 
 # カテゴリの入力文字数の上限と、予約名(カテゴリ未設定の表示名)
@@ -207,10 +208,10 @@ class DoneFilter(str, Enum):
 
 
 def is_done(item: TodoItem, today: date) -> bool:
-    """完了済みか。繰り返し(毎日・週次・月次)は完了した日だけ、当日(one_time)は永続的に完了とする。"""
+    """完了済みか。繰り返し(毎日・週次・月次)は完了した日だけ、当日(one_time)・未定は永続的に完了とする。"""
     if item.done_date is None:
         return False
-    if item.schedule_type is ScheduleType.ONE_TIME:
+    if item.schedule_type in (ScheduleType.ONE_TIME, ScheduleType.UNDECIDED):
         return True
     return item.done_date == today
 
@@ -231,6 +232,8 @@ def matches_done_filter(item: TodoItem, today: date, done_filter: DoneFilter) ->
 
 
 def is_due_today(item: TodoItem, today: date) -> bool:
+    if item.schedule_type is ScheduleType.UNDECIDED:
+        return False
     if item.schedule_type is ScheduleType.DAILY:
         return True
     # 週次・月次は基準日から繰り返す。基準日より前の日は対象外とする
