@@ -4,6 +4,7 @@ from todoapp.ui.formatting import (
     format_estimate,
     format_estimate_cell,
     format_gap,
+    format_hhmm,
     format_work_balance,
     gap_background,
     hours_minutes_to_estimate,
@@ -136,3 +137,22 @@ def test_format_work_balance_exact_match_is_not_over() -> None:
     # 境界値分析: 合計が標準労働時間ちょうどは超過扱いにしない
     assert format_work_balance(8.0, 8 * 3600) == ("残り 0分", False)
     assert format_work_balance(8.0, 8 * 3600 + 60) == ("超過 1分", True)
+
+
+def test_format_hhmm_at_zero_boundary() -> None:
+    assert format_hhmm(0) == "00:00"
+    assert format_hhmm(-1) == "00:00"
+
+
+def test_format_hhmm_rounds_seconds_half_up_to_minutes() -> None:
+    # 境界値分析: 29秒は切り捨て、30秒ちょうどは繰り上げ(偶数丸めにしない)
+    assert format_hhmm(29) == "00:00"
+    assert format_hhmm(30) == "00:01"
+    assert format_hhmm(90) == "00:02"
+    assert format_hhmm(5369) == "01:29"
+    assert format_hhmm(5370) == "01:30"
+
+
+def test_format_hhmm_carries_minutes_into_hours() -> None:
+    assert format_hhmm(3570) == "01:00"
+    assert format_hhmm(3600 * 25) == "25:00"

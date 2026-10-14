@@ -21,6 +21,13 @@ def format_duration(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def format_hhmm(seconds: float) -> str:
+    """時分(HH:MM)で表す。秒は四捨五入(30秒で繰り上げ)して分にする。"""
+    total_minutes = (max(int(seconds), 0) + 30) // 60
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{hours:02d}:{minutes:02d}"
+
+
 def estimate_to_hours_minutes(estimate_hours: float) -> tuple[int, int]:
     """見積り(時間の小数)を、分単位に丸めた(時間, 分)に分ける。"""
     total_minutes = max(round(estimate_hours * 60), 0)
