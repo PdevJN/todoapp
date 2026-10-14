@@ -62,6 +62,10 @@ def _item(
         (ScheduleType.ONE_TIME, date(2026, 8, 23), False),
         (ScheduleType.ONE_TIME, ANCHOR, True),
         (ScheduleType.ONE_TIME, date(2026, 8, 25), False),
+        # 未定: どの日も対象外(基準日は使わない)
+        (ScheduleType.UNDECIDED, date(2026, 8, 23), False),
+        (ScheduleType.UNDECIDED, ANCHOR, False),
+        (ScheduleType.UNDECIDED, date(2026, 8, 25), False),
     ],
 )
 def test_is_due_today_equivalence_classes(schedule_type: ScheduleType, today: date, expected: bool) -> None:
@@ -117,10 +121,12 @@ def test_weekly_and_monthly_are_due_across_year_boundary() -> None:
     [
         # 完了日なし: どの種別でも未完了
         *[(t, None, False) for t in ScheduleType],
-        # 当日(one_time): 完了日が過去・当日・未来のいずれでも完了のまま
-        (ScheduleType.ONE_TIME, date(2026, 9, 6), True),
-        (ScheduleType.ONE_TIME, TODAY, True),
-        (ScheduleType.ONE_TIME, date(2026, 9, 8), True),
+        # 当日(one_time)・未定: 完了日が過去・当日・未来のいずれでも完了のまま
+        *[
+            (t, done, True)
+            for t in (ScheduleType.ONE_TIME, ScheduleType.UNDECIDED)
+            for done in (date(2026, 9, 6), TODAY, date(2026, 9, 8))
+        ],
         # 繰り返し: 完了日が当日の場合だけ完了(前日・翌日は未完了に戻る)
         *[
             (t, done, done == TODAY)

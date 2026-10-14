@@ -6,7 +6,7 @@ from datetime import date
 from nicegui import ui
 from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 
-from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, has_control_chars, is_category_expired, is_done
+from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, ScheduleType, has_control_chars, is_category_expired, is_done
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
@@ -37,7 +37,7 @@ class ListView:
                 self._name_filter.on("keydown.enter", self._apply_name_filter, js_handler=IME_SAFE_ENTER_HANDLER)
                 self._name_filter.on("blur", self._apply_name_filter)
                 self._schedule_filter = ui.select(
-                    SCHEDULE_LABELS, label="実行の曜日", multiple=True
+                    SCHEDULE_LABELS, label="スケジュール", multiple=True
                 ).classes("w-48")
                 self._schedule_filter.on_value_change(self.render.refresh)
                 self._anchor_filter = ui.input(
@@ -138,7 +138,9 @@ class ListView:
                 continue
             if schedule_filter and item.schedule_type.value not in schedule_filter:
                 continue
-            if anchor_filter is not None and item.anchor_date != anchor_filter:
+            # 未定は基準日を持たないため、基準日の絞り込みでは除外しない
+            is_undecided = item.schedule_type is ScheduleType.UNDECIDED
+            if anchor_filter is not None and not is_undecided and item.anchor_date != anchor_filter:
                 continue
             cumulative = self._service.cumulative_seconds(item.id)
             remaining = self._service.remaining_seconds(item.id)
@@ -149,7 +151,7 @@ class ListView:
                     "name": item.name,
                     "done": is_done(item, today),
                     "schedule": SCHEDULE_LABELS[item.schedule_type.value],
-                    "anchor": item.anchor_date.strftime("%m/%d"),
+                    "anchor": "-" if is_undecided else item.anchor_date.strftime("%m/%d"),
                     "cumulative": format_duration(cumulative),
                     "remaining": format_duration(remaining) if item.estimate_hours > 0 else "-",
                     "category_label": category.name if category else "未定",

@@ -20,6 +20,9 @@ from todoapp.ui.formatting import (
 # ChoiceElement.update()と競合しクライアントに反映されないことがあるため避ける)
 _CATEGORY_LABEL_SEP = "\x1f"
 
+# 基準日を使わないスケジュール(基準日の入力欄を隠す)
+_NO_ANCHOR_SCHEDULES = {ScheduleType.DAILY.value, ScheduleType.UNDECIDED.value}
+
 
 def _category_label(name: str, prj_code: str = "", kind: str = "", color: str = "grey") -> str:
     return f"{name}{_CATEGORY_LABEL_SEP}{prj_code}{_CATEGORY_LABEL_SEP}{kind}{_CATEGORY_LABEL_SEP}{color}"
@@ -49,7 +52,7 @@ class EditDialog(DialogMixin):
             self._name_input.on("keydown.enter.prevent", lambda: None)
             self._schedule_select = ui.select(
                 SCHEDULE_LABELS,
-                label="実行の曜日",
+                label="スケジュール",
                 value=ScheduleType.ONE_TIME.value,
             ).classes("w-full")
             self._schedule_select.on_value_change(self._update_anchor_visibility)
@@ -143,7 +146,7 @@ class EditDialog(DialogMixin):
             self._work_balance_label.classes(add="text-gray-600", remove="text-negative")
 
     def _update_anchor_visibility(self) -> None:
-        self._anchor_input.set_visibility(self._schedule_select.value != ScheduleType.DAILY.value)
+        self._anchor_input.set_visibility(self._schedule_select.value not in _NO_ANCHOR_SCHEDULES)
 
     def _save(self) -> None:
         if self._item_id is None:
@@ -159,7 +162,7 @@ class EditDialog(DialogMixin):
         schedule_type = ScheduleType(self._schedule_select.value)
         anchor_date = (
             date.fromisoformat(self._anchor_input.value)
-            if schedule_type is not ScheduleType.DAILY
+            if schedule_type.value not in _NO_ANCHOR_SCHEDULES
             else date.today()
         )
         self._service.edit_item(

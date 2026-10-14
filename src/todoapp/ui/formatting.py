@@ -5,6 +5,7 @@ SCHEDULE_LABELS = {
     "weekly": "週次",
     "monthly": "月次",
     "one_time": "当日",
+    "undecided": "未定",
 }
 
 

@@ -58,6 +58,21 @@ async def test_main_panel_shows_only_items_due_today(app_user: User, app_env: Ap
     await hides(app_user, "別の曜日")
 
 
+async def test_undecided_item_is_hidden_on_main_but_shown_in_list(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("いつかやる", ScheduleType.UNDECIDED, anchor_date=TOMORROW), make_item("今日だけ", anchor_date=TOMORROW)])
+    await app_user.open("/")
+
+    await hides(app_user, "いつかやる")
+
+    await press(app_user, "Escape")  # 編集一覧(基準日の既定は当日)
+    await shows(app_user, "編集一覧")
+    [table] = [t for t in app_user.find(ui.table).elements if any(c["name"] == "anchor" for c in t.columns)]
+    rows = {row["name"]: row for row in table.rows}
+    assert rows["いつかやる"]["anchor"] == "-"
+    assert rows["いつかやる"]["schedule"] == "未定"
+    assert "今日だけ" not in rows  # 基準日が当日の絞り込みは、未定以外にも効く
+
+
 async def test_main_panel_hides_done_items_by_default(app_user: User, app_env: AppEnv) -> None:
     app_env.seed(items=[make_item("終わった", ScheduleType.ONE_TIME, done_date=TODAY), make_item("これから")])
     await app_user.open("/")
