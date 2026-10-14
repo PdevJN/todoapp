@@ -185,7 +185,11 @@ class LogView(DialogMixin):
             # 左側(バッジ+タスク名)だけを縮められるようにし、長いタスク名は「...」で省略して
             # マウスオーバーで全文をツールチップ表示する(時刻・ボタン側は幅を固定して見切れを防ぐ)
             with ui.row().classes("items-center gap-2 no-wrap min-w-0 flex-1"):
-                ui.badge(category_name).props(f"outline color={category_color}").classes("shrink-0")
+                # 長いカテゴリ名は幅を制限して「...」で省略し、マウスオーバーで全文を表示する
+                with ui.badge(category_name).props(f"outline color={category_color}").classes(
+                    "shrink-0 max-w-[7rem] truncate"
+                ):
+                    ui.tooltip(category_name)
                 with ui.label(record.item_name).classes("font-medium truncate min-w-0"):
                     ui.tooltip(record.item_name)
             with ui.row().classes("items-center gap-1 no-wrap shrink-0"):
@@ -202,16 +206,20 @@ class LogView(DialogMixin):
     ) -> tuple[ui.label, list[ui.label]]:
         classes = "w-full justify-between items-center border-b py-1 px-1 rounded"
         with ui.row().classes(classes + (" bg-gray-100" if category is None else "")):
-            with ui.row().classes("items-center gap-1"):
+            # 左側(カテゴリ名)だけを縮められるようにし、長い名前は「...」で省略する(合計時間側は幅を固定する)
+            with ui.row().classes("items-center gap-1 no-wrap min-w-0 flex-1"):
                 if category is None:
                     ui.label("未定").classes("font-medium text-gray-500")
                 else:
-                    ui.label(category.name).classes("font-medium")
+                    ui.label(category.name).classes("font-medium truncate min-w-0")
                     if category.prj_code:
-                        ui.badge(category.prj_code).props("outline")
-            total_label = ui.label(format_hhmm(seconds)).classes("text-gray-500 font-mono")
+                        ui.badge(category.prj_code).props("outline").classes("shrink-0 max-w-[8rem] truncate")
+            total_label = ui.label(format_hhmm(seconds)).classes("text-gray-500 font-mono shrink-0")
             item_labels: list[ui.label] = []
             with ui.tooltip().classes("text-sm"):
+                if category is not None:
+                    # 省略された名前の全文を、ツールチップの先頭に表示する
+                    ui.label(category.name).classes("font-bold")
                 if not items:
                     ui.label("本日のタスクはありません")
                 for name, item_seconds, done in items:

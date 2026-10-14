@@ -388,3 +388,40 @@ async def test_reopening_log_returns_to_order_mode(app_user: User, app_env: AppE
 
     await shows(app_user, "本日の記録はまだありません")
     assert _copy_button(app_user) is None
+
+
+# --- 長いカテゴリ名の表示(見切れ防止) -----------------------------------------------------
+
+_LONG_CATEGORY_NAME = "とても長いカテゴリ名" * 3  # 30文字(上限)
+
+
+def _labels_with_text(user: User, text: str) -> list[ui.label]:
+    return [e for e in user.find(kind=ui.label).elements if isinstance(e, ui.label) and e.text == text]
+
+
+async def test_order_mode_truncates_long_category_badge_and_shows_full_name_in_tooltip(
+    app_user: User, app_env: AppEnv
+) -> None:
+    category = Category(name=_LONG_CATEGORY_NAME)
+    item = _done_item("設計", category_id=category.id)
+    app_env.seed(items=[item], categories=[category], records=[make_record(item, _at(9), _at(10))])
+    await _open_log(app_user)
+
+    [badge] = [e for e in app_user.find(kind=ui.badge).elements if e.text == _LONG_CATEGORY_NAME]
+    assert {"truncate", "shrink-0"} <= set(badge.classes)  # 幅を超える分は「...」で省略し、時刻側を押し出さない
+    assert any(isinstance(child, ui.tooltip) and child.text == _LONG_CATEGORY_NAME for child in badge)
+
+
+async def test_category_mode_truncates_long_category_name_and_shows_full_name_in_tooltip(
+    app_user: User, app_env: AppEnv
+) -> None:
+    category = Category(name=_LONG_CATEGORY_NAME, prj_code="P" * 20)
+    app_env.seed(categories=[category])
+    await _open_log(app_user)
+
+    select_toggle(app_user, "カテゴリ別")
+    await shows(app_user, "本日のタスクはありません")
+
+    labels = _labels_with_text(app_user, _LONG_CATEGORY_NAME)
+    assert len(labels) == 2  # 行の表示と、ツールチップ先頭の全文
+    assert sum("truncate" in set(label.classes) for label in labels) == 1
