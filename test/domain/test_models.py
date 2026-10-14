@@ -9,6 +9,7 @@ from todoapp.domain.models import (
     is_category_expired,
     is_done,
     is_due_today,
+    is_skipped,
     matches_done_filter,
     today_estimate_seconds,
 )
@@ -289,3 +290,48 @@ def test_undecided_item_round_trips_through_dict() -> None:
 
     assert TodoItem.from_dict(item.to_dict()).schedule_type is ScheduleType.UNDECIDED
     assert item.to_dict()["schedule_type"] == "undecided"
+
+
+def test_is_skipped_only_for_repeating_items_on_the_skipped_day() -> None:
+    today = date(2026, 8, 30)
+    for schedule_type in (ScheduleType.DAILY, ScheduleType.WEEKLY, ScheduleType.MONTHLY):
+        item = _item(schedule_type, today)
+        assert is_skipped(item, today) is False  # skip_dateなし
+
+        item.skip_date = today
+        assert is_skipped(item, today) is True
+        assert is_skipped(item, today + timedelta(days=1)) is False  # 翌日は自動で解除
+        assert is_skipped(item, today - timedelta(days=1)) is False
+
+
+def test_non_repeating_items_are_never_skipped() -> None:
+    today = date(2026, 8, 30)
+    for schedule_type in (ScheduleType.ONE_TIME, ScheduleType.UNDECIDED):
+        item = _item(schedule_type, today)
+        item.skip_date = today
+
+        assert is_skipped(item, today) is False
+
+
+def test_matches_done_filter_with_skipped_items() -> None:
+    today = date(2026, 8, 30)
+    skipped = _item(ScheduleType.DAILY, today)
+    skipped.skip_date = today
+    open_item = _item(ScheduleType.DAILY, today)
+
+    assert matches_done_filter(skipped, today, DoneFilter.ACTIVE) is False  # 未完了のみには出さない
+    assert matches_done_filter(skipped, today, DoneFilter.DONE) is False
+    assert matches_done_filter(skipped, today, DoneFilter.SKIPPED) is True
+    assert matches_done_filter(skipped, today, DoneFilter.ALL) is True
+    assert matches_done_filter(open_item, today, DoneFilter.SKIPPED) is False
+    assert matches_done_filter(open_item, today, DoneFilter.ACTIVE) is True
+
+
+def test_skip_date_round_trips_and_defaults_to_none() -> None:
+    item = _item(ScheduleType.DAILY, date(2026, 8, 24))
+    item.skip_date = date(2026, 8, 30)
+    assert TodoItem.from_dict(item.to_dict()).skip_date == date(2026, 8, 30)
+
+    data = item.to_dict()
+    del data["skip_date"]
+    assert TodoItem.from_dict(data).skip_date is None

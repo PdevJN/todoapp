@@ -1174,3 +1174,77 @@ def test_is_category_name_taken() -> None:
     assert not service.is_category_name_taken("仕事", exclude_id=category.id)
     assert service.is_category_name_taken("未定")
     assert not service.is_category_name_taken("趣味")
+
+
+def test_toggle_skipped_skips_then_unskips_repeating_items() -> None:
+    service, _, _ = _service()
+    item = service.add_item("A", ScheduleType.DAILY, TODAY)
+
+    assert service.toggle_skipped([item.id], TODAY) is True
+    assert item.skip_date == TODAY
+    assert service.items_due_today(TODAY, DoneFilter.ACTIVE) == []
+    assert service.items_due_today(TODAY, DoneFilter.SKIPPED) == [item]
+
+    service.toggle_skipped([item.id], TODAY)
+    assert item.skip_date is None
+
+
+def test_toggle_skipped_skips_all_when_any_is_not_skipped() -> None:
+    service, _, _ = _service()
+    a = service.add_item("A", ScheduleType.DAILY, TODAY)
+    b = service.add_item("B", ScheduleType.WEEKLY, TODAY)
+    service.toggle_skipped([a.id], TODAY)
+
+    service.toggle_skipped([a.id, b.id], TODAY)
+
+    assert a.skip_date == TODAY and b.skip_date == TODAY
+
+
+def test_toggle_skipped_ignores_non_repeating_items() -> None:
+    service, _, _ = _service()
+    once = service.add_item("当日", ScheduleType.ONE_TIME, TODAY)
+    undecided = service.add_item("未定", ScheduleType.UNDECIDED, TODAY)
+    daily = service.add_item("毎日", ScheduleType.DAILY, TODAY)
+
+    assert service.toggle_skipped([once.id, undecided.id], TODAY) is False  # 対象が無い
+    assert once.skip_date is None and undecided.skip_date is None
+
+    assert service.toggle_skipped([once.id, daily.id], TODAY) is True
+    assert once.skip_date is None and daily.skip_date == TODAY
+
+
+def test_skip_and_done_are_mutually_exclusive() -> None:
+    service, _, _ = _service()
+    item = service.add_item("A", ScheduleType.DAILY, TODAY)
+    service.set_done([item.id], True, TODAY)
+
+    service.toggle_skipped([item.id], TODAY)
+    assert item.skip_date == TODAY and item.done_date is None
+
+    service.set_done([item.id], True, TODAY)
+    assert item.skip_date is None and item.done_date == TODAY
+
+
+def test_skipping_running_item_stops_it_and_keeps_the_record() -> None:
+    service, _, clock = _service()
+    item = service.add_item("A", ScheduleType.DAILY, TODAY)
+    service.toggle_execution(item.id)
+    clock.advance(60)
+
+    service.toggle_skipped([item.id], TODAY)
+
+    assert service.running_record() is None
+    assert service.today_total_seconds(item.id, clock().date()) == 60
+
+
+def test_today_estimate_total_excludes_skipped_items() -> None:
+    service, _, _ = _service()
+    today = date(2026, 8, 30)
+    a = service.add_item("A", ScheduleType.DAILY, today)
+    b = service.add_item("B", ScheduleType.DAILY, today)
+    service.edit_item(a.id, today_estimate_hours=2.0)
+    service.edit_item(b.id, today_estimate_hours=1.0)
+
+    service.toggle_skipped([b.id], today)
+
+    assert service.today_estimate_total_seconds(today) == 2 * 3600

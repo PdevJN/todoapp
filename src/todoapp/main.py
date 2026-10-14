@@ -157,6 +157,19 @@ def build_app_ui(
             state.select_items(set())
         refresh_all()
 
+    def skip_selected_items() -> None:
+        ids = set(state.selected_item_ids) or ({state.selected_item_id} if state.selected_item_id else set())
+        if not ids:
+            return
+        if not service.toggle_skipped(ids, date.today()):
+            ui.notify("スキップできるのは、毎日・週次・月次のアイテムです", type="warning")
+            return
+        # 絞り込み中は、切り替えたアイテムが表示から外れるため選択も解除する
+        if state.screen is Screen.MAIN and state.done_filter is not DoneFilter.ALL:
+            state.select(None)
+            state.select_items(set())
+        refresh_all()
+
     def delete_selected_items() -> None:
         ids = set(state.selected_item_ids)
         if not ids:
@@ -296,6 +309,7 @@ def build_app_ui(
         open_settings=settings_dialog.open,
         shift_view_date=main_view.shift_view_date,
         toggle_done_selected_items=toggle_done_selected_items,
+        skip_selected_items=skip_selected_items,
         delete_selected_items=delete_selected_items,
         delete_selected_records=delete_selected_records,
         delete_selected_categories=delete_selected_categories,

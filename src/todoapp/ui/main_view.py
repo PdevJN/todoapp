@@ -8,11 +8,11 @@ from nicegui.elements.dark_mode import DarkMode
 from nicegui.elements.fab import FabAction
 from nicegui.events import GenericEventArguments, SortableEventArguments, ValueChangeEventArguments
 
-from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, DoneFilter, ScheduleType, TodoItem, is_category_expired, is_done, matches_done_filter, today_estimate_seconds, validate_item_name
+from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, DoneFilter, ScheduleType, TodoItem, is_category_expired, is_done, is_skipped, matches_done_filter, today_estimate_seconds, validate_item_name
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
-from todoapp.ui.formatting import DONE_FILTER_LABELS, DONE_TEXT_CLASSES, SCHEDULE_LABELS, format_duration, format_estimate, format_work_balance
+from todoapp.ui.formatting import DONE_FILTER_LABELS, DONE_TEXT_CLASSES, SCHEDULE_LABELS, SKIPPED_TEXT_CLASSES, format_duration, format_estimate, format_work_balance
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 
 _THEME_ACTIVE_COLOR = "primary"
@@ -348,7 +348,8 @@ class MainView:
             return
         view_date = self._state.view_date
         has_estimate = any(
-            today_estimate_seconds(item, view_date) is not None for item in self._service.items_due_today(view_date)
+            today_estimate_seconds(item, view_date) is not None and not is_skipped(item, view_date)
+            for item in self._service.items_due_today(view_date)
         )
         label.set_visibility(has_estimate)
         if not has_estimate:
@@ -380,8 +381,15 @@ class MainView:
             category_label = f"{expired_mark}{category.name}" if category is not None else "未定"
             category_color = category.color if category is not None else "grey"
             ui.badge(category_label).props(f"outline color={category_color}")
-            name_classes = "font-medium" + (f" {DONE_TEXT_CLASSES}" if is_done(item, view_date) else "")
+            skipped = is_skipped(item, view_date)
+            name_classes = "font-medium"
+            if is_done(item, view_date):
+                name_classes += f" {DONE_TEXT_CLASSES}"
+            elif skipped:
+                name_classes += f" {SKIPPED_TEXT_CLASSES}"
             ui.label(item.name).classes(name_classes)
+            if skipped:
+                ui.badge("スキップ").props("outline color=grey")
             ui.badge(SCHEDULE_LABELS[item.schedule_type.value]).props("outline")
             if is_running:
                 assert running is not None

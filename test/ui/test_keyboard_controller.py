@@ -316,6 +316,23 @@ def test_d_is_ignored_in_guarded_states(h: Harness, case: str) -> None:
     assert not h.called("toggle_done_selected_items")
 
 
+def test_shift_s_skips_selected_items(h: Harness) -> None:
+    h.press("S", shift=True)
+
+    assert h.called("skip_selected_items")
+
+
+@pytest.mark.parametrize("case", ["dialog_open", "read_only_view"])
+def test_shift_s_is_ignored_in_guarded_states(h: Harness, case: str) -> None:
+    if case == "dialog_open":
+        h.set_true("is_dialog_open")
+    else:
+        h.state.view_date = date.today() - timedelta(days=1)
+    h.press("S", shift=True)
+
+    assert not h.called("skip_selected_items")
+
+
 def test_c_cancels_running_of_selected_item(h: Harness) -> None:
     h.state.select("a")
     h.press("c")
