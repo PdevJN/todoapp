@@ -12,7 +12,7 @@ from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, DoneFilter, ScheduleType
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
-from todoapp.ui.formatting import DONE_FILTER_LABELS, DONE_TEXT_CLASSES, SCHEDULE_LABELS, format_duration, format_estimate
+from todoapp.ui.formatting import DONE_FILTER_LABELS, DONE_TEXT_CLASSES, SCHEDULE_LABELS, format_duration, format_estimate, format_work_balance
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 
 _THEME_ACTIVE_COLOR = "primary"
@@ -29,6 +29,7 @@ class MainView:
         dark_mode: DarkMode,
         initial_theme: Theme,
         open_help: Callable[[], None],
+        get_standard_work_hours: Callable[[], float],
     ) -> None:
         self._service = service
         self._state = state
@@ -38,10 +39,13 @@ class MainView:
         self._current_theme: Theme = initial_theme
         self._theme_actions: dict[Theme, FabAction] = {}
         self._open_help = open_help
+        self._get_standard_work_hours = get_standard_work_hours
         self._new_item_input: ui.input | None = None
         self._running_indicator: ui.row | None = None
         self._running_name_label: ui.label | None = None
         self._running_remaining_label: ui.label | None = None
+        self._work_balance_label: ui.label | None = None
+        self._work_balance_tooltip: ui.tooltip | None = None
         self._elapsed_label: ui.label | None = None
         self._elapsed_item_id: str | None = None
         self._rendered_item_ids: list[str] = []
@@ -85,6 +89,10 @@ class MainView:
                     value=self._state.view_date.isoformat(), on_change=self._on_view_date_change
                 ).props("type=date dense")
                 ui.button(icon="chevron_right", on_click=lambda: self.shift_view_date(1)).props("flat dense round")
+                self._work_balance_label = ui.label("").classes("text-sm ml-2")
+                with self._work_balance_label:
+                    self._work_balance_tooltip = ui.tooltip("")
+                self._work_balance_label.set_visibility(False)
             # 完了アイテムの表示は、未完了のみ(既定)・すべて・完了のみを切り替える
             self._done_filter_toggle = ui.toggle(
                 DONE_FILTER_LABELS, value=self._state.done_filter.value, on_change=self._on_done_filter_change
@@ -330,7 +338,30 @@ class MainView:
                     self._render_row(item, today, view_date)
         if self._new_item_input is not None:
             self._new_item_input.set_autocomplete(self._service.item_name_candidates())
+        self._update_work_balance()
         self._update_running_indicator()
+
+    def _update_work_balance(self) -> None:
+        """標準労働時間から表示日の本日の見積り合計を引いた残りを、日付切り替えの隣に表示する。"""
+        label = self._work_balance_label
+        if label is None:
+            return
+        view_date = self._state.view_date
+        has_estimate = any(
+            today_estimate_seconds(item, view_date) is not None for item in self._service.items_due_today(view_date)
+        )
+        label.set_visibility(has_estimate)
+        if not has_estimate:
+            return
+        standard_hours = self._get_standard_work_hours()
+        text, over = format_work_balance(standard_hours, self._service.today_estimate_total_seconds(view_date))
+        label.set_text(text)
+        if self._work_balance_tooltip is not None:
+            self._work_balance_tooltip.set_text(f"標準労働時間 {standard_hours:g}時間 − 本日の見積り合計")
+        if over:
+            label.classes(add="text-negative", remove="text-gray-600")
+        else:
+            label.classes(add="text-gray-600", remove="text-negative")
 
     def _render_row(self, item: TodoItem, today: date, view_date: date) -> None:
         running = self._service.running_record()
