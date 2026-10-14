@@ -12,6 +12,7 @@ from test.ui.harness import (
     AppEnv,
     click_displayed,
     click_row,
+    displayed_elements,
     double_click_row,
     hides,
     input_value,
@@ -71,6 +72,42 @@ async def test_undecided_item_is_hidden_on_main_but_shown_in_list(app_user: User
     assert rows["いつかやる"]["anchor"] == "-"
     assert rows["いつかやる"]["schedule"] == "未定"
     assert "今日だけ" not in rows  # 基準日が当日の絞り込みは、未定以外にも効く
+
+
+async def test_work_balance_shows_standard_hours_minus_today_estimates(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(
+        items=[
+            make_item("設計", today_estimate_hours=3.0, today_estimate_date=TODAY),
+            make_item("終わった", ScheduleType.ONE_TIME, today_estimate_hours=1.0, today_estimate_date=TODAY, done_date=TODAY),
+            make_item("通常見積りのみ", estimate_hours=5.0),
+        ]
+    )
+    await app_user.open("/")
+
+    await shows(app_user, "残り 4時間")  # 標準労働時間8時間 - (3 + 1)。完了済みも含み、通常の見積りは含めない
+
+
+async def test_work_balance_shows_over_when_estimates_exceed_standard_hours(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("設計", today_estimate_hours=9.0, today_estimate_date=TODAY)])
+    await app_user.open("/")
+
+    await shows(app_user, "超過 1時間")
+    [label] = displayed_elements(app_user, "超過 1時間")
+    assert "text-negative" in label.classes
+
+
+async def test_work_balance_is_hidden_without_today_estimates(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(
+        items=[
+            make_item("見積りなし"),
+            make_item("昨日の限定見積り", today_estimate_hours=2.0, today_estimate_date=TODAY - timedelta(days=1)),
+        ]
+    )
+    await app_user.open("/")
+
+    await shows(app_user, "見積りなし")
+    await hides(app_user, "残り")
+    await hides(app_user, "超過")
 
 
 async def test_main_panel_hides_done_items_by_default(app_user: User, app_env: AppEnv) -> None:

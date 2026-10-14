@@ -228,6 +228,7 @@ def build_app_ui(
         dark_mode=dark_mode,
         initial_theme=config.theme,
         open_help=help_dialog.open,
+        get_standard_work_hours=lambda: config.standard_work_hours,
     )
     list_view = ListView(service, state)
     edit_dialog = EditDialog(service, refresh_all=refresh_all, get_standard_work_hours=lambda: config.standard_work_hours)
