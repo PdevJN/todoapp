@@ -157,7 +157,7 @@ def _run_until(service: TodoService, clock: FakeClock, target: datetime) -> None
     """実際の1秒タイマーのように、時計を細かく進めながら見守りを呼ぶ(30秒刻みで中断扱いにならない)。"""
     while clock.now < target:
         clock.now = min(clock.now + timedelta(seconds=30), target)
-        assert not service.keep_alive()
+        assert not service.keep_alive(detect_suspend=True)
 
 
 def test_keep_alive_splits_running_record_at_midnight_and_continues() -> None:
@@ -175,7 +175,7 @@ def test_keep_alive_leaves_running_record_within_the_same_day() -> None:
     service, clock, _, _ = _running(_at(DAY1, 9))
 
     clock.advance(30)
-    service.keep_alive()
+    service.keep_alive(detect_suspend=True)
 
     assert _spans(service) == [(_at(DAY1, 9), None)]
 
@@ -197,7 +197,7 @@ def test_keep_alive_stops_at_last_tick_when_a_long_gap_is_detected() -> None:
     _run_until(service, clock, _at(DAY1, 9, 10))  # 9:10 まで動作していた
 
     clock.advance(3600)  # スリープ: 1時間タイマーが止まる
-    stopped_by_suspend = service.keep_alive()
+    stopped_by_suspend = service.keep_alive(detect_suspend=True)
 
     assert stopped_by_suspend
     assert service.running_record() is None
@@ -208,7 +208,7 @@ def test_keep_alive_does_not_treat_a_short_gap_as_suspend() -> None:
     service, clock, _, _ = _running(_at(DAY1, 9))
 
     clock.advance(5)
-    stopped_by_suspend = service.keep_alive()
+    stopped_by_suspend = service.keep_alive(detect_suspend=True)
 
     assert not stopped_by_suspend
     assert service.running_record() is not None
@@ -219,7 +219,7 @@ def test_suspend_across_midnight_stops_at_last_tick_without_splitting() -> None:
     _run_until(service, clock, _at(DAY1, 23, 50, 10))  # 直前まで動作
 
     clock.now = _at(DAY2, 7)  # 一晩スリープ
-    service.keep_alive()
+    service.keep_alive(detect_suspend=True)
 
     assert _spans(service) == [(_at(DAY1, 23, 50), _at(DAY1, 23, 50, 10))]
 
@@ -228,12 +228,12 @@ def test_start_after_idle_gap_is_not_mistaken_for_suspend() -> None:
     clock = FakeClock(_at(DAY1, 9))
     service = TodoService(FakeRepository(), clock=clock, alive_store=FakeAliveStore())
     item = service.add_item("作業", ScheduleType.DAILY, DAY1.date())
-    service.keep_alive()  # 実行中でなければ何もしない
+    service.keep_alive(detect_suspend=True)  # 実行中でなければ何もしない
 
     clock.advance(7200)  # 2時間操作なし(スリープ含む)
     service.start(item.id)
     clock.advance(1)
-    stopped_by_suspend = service.keep_alive()
+    stopped_by_suspend = service.keep_alive(detect_suspend=True)
 
     assert not stopped_by_suspend
     assert service.running_record() is not None
@@ -246,7 +246,7 @@ def test_keep_alive_without_running_record_does_nothing() -> None:
 
     clock.advance(7200)
 
-    assert not service.keep_alive()
+    assert not service.keep_alive(detect_suspend=True)
     assert store.save_count == 0
 
 
@@ -263,11 +263,11 @@ def test_keep_alive_saves_alive_time_every_two_seconds_only() -> None:
     service, clock, store, _ = _running(_at(DAY1, 9))
 
     clock.advance(1)
-    service.keep_alive()
+    service.keep_alive(detect_suspend=True)
     assert store.value == _at(DAY1, 9)  # 2秒未満は書き込まない
 
     clock.advance(1)
-    service.keep_alive()
+    service.keep_alive(detect_suspend=True)
     assert store.value == _at(DAY1, 9, 0, 2)
 
 
@@ -279,4 +279,57 @@ def test_service_works_without_alive_store() -> None:
 
     clock.advance(5)
 
-    assert not service.keep_alive()
+    assert not service.keep_alive(detect_suspend=True)
+
+
+def test_keep_alive_does_not_stop_after_a_long_gap_when_suspend_detection_is_disabled() -> None:
+    service, clock, _, _ = _running(_at(DAY1, 9))
+    _run_until(service, clock, _at(DAY1, 9, 10))
+
+    clock.advance(3600)  # スリープ: 1時間タイマーが止まる
+    stopped_by_suspend = service.keep_alive(detect_suspend=False)
+
+    assert not stopped_by_suspend
+    record = service.running_record()
+    assert record is not None
+    assert record.start_time == _at(DAY1, 9)
+
+
+def test_keep_alive_still_splits_at_midnight_when_suspend_detection_is_disabled() -> None:
+    service, clock, _, item_id = _running(_at(DAY1, 23, 30))
+
+    clock.now = _at(DAY2, 0, 30)
+    service.keep_alive(detect_suspend=False)
+
+    running = service.running_record()
+    assert running is not None
+    assert running.item_id == item_id
+    assert running.start_time == DAY2
+
+
+def test_stop_on_shutdown_stops_running_record_at_current_time() -> None:
+    service, clock, _, _ = _running(_at(DAY1, 9))
+
+    clock.advance(600)
+    service.stop_on_shutdown()
+
+    assert service.running_record() is None
+    assert _spans(service) == [(_at(DAY1, 9), _at(DAY1, 9, 10))]
+
+
+def test_stop_on_shutdown_splits_record_across_midnight() -> None:
+    service, clock, _, _ = _running(_at(DAY1, 23, 30))
+
+    clock.now = _at(DAY2, 0, 10)
+    service.stop_on_shutdown()
+
+    assert service.running_record() is None
+    assert _spans(service) == [(_at(DAY1, 23, 30), DAY2), (DAY2, _at(DAY2, 0, 10))]
+
+
+def test_stop_on_shutdown_without_running_record_does_nothing() -> None:
+    service = TodoService(FakeRepository(), clock=FakeClock(_at(DAY1, 9)))
+
+    service.stop_on_shutdown()
+
+    assert service.running_record() is None

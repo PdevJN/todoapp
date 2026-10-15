@@ -34,6 +34,10 @@ def _parse_standard_work_hours(value: Any) -> float:
     return float(value)
 
 
+def _parse_suspend_detection(value: Any) -> bool:
+    return value is True
+
+
 def theme_to_dark_mode_value(theme: Theme) -> bool | None:
     if theme == "light":
         return False
@@ -55,6 +59,7 @@ class AppConfig:
     theme: Theme = "auto"
     week_start: WeekStart = "sunday"
     standard_work_hours: float = DEFAULT_STANDARD_WORK_HOURS  # 1日の標準労働時間(時間)
+    suspend_detection: bool = False  # スリープ等で処理が止まった場合に実行を停止するか
 
 
 class ConfigRepository:
@@ -75,6 +80,7 @@ class ConfigRepository:
             theme=_parse_theme(raw.get("theme")),
             week_start=_parse_week_start(raw.get("week_start")),
             standard_work_hours=_parse_standard_work_hours(raw.get("standard_work_hours")),
+            suspend_detection=_parse_suspend_detection(raw.get("suspend_detection")),
         )
 
     def save(self, config: AppConfig) -> None:
@@ -82,5 +88,6 @@ class ConfigRepository:
             "theme": config.theme,
             "week_start": config.week_start,
             "standard_work_hours": config.standard_work_hours,
+            "suspend_detection": config.suspend_detection,
         }
         atomic_write_text(self._path, json.dumps(payload, ensure_ascii=False, indent=2))

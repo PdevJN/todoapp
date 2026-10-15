@@ -171,10 +171,19 @@ class TodoService:
         self._close_at(running, end)
         self._save()
 
-    def keep_alive(self) -> bool:
+    def stop_on_shutdown(self) -> None:
+        """アプリの正常終了時に、実行中の記録を現在時刻で停止する(0:00を跨ぐ場合は日ごとに分割する)。"""
+        running = self.running_record()
+        if running is None:
+            return
+        self._close_at(running, self._clock())
+        self._save()
+
+    def keep_alive(self, *, detect_suspend: bool) -> bool:
         """実行中の見守り(1秒タイマーから呼ぶ)。0:00を跨いだ記録を分割して継続し、生存時刻を保存する。
 
-        スリープ等で呼び出しが長く空いていた場合は、最後に動作していた時刻で停止して`True`を返す。
+        `detect_suspend`が真で、スリープ等により呼び出しが長く空いていた場合は、最後に動作していた時刻で
+        停止して`True`を返す。偽の場合は、空いていても停止せず計測を続ける。
         """
         now = self._clock()
         running = self.running_record()
@@ -182,7 +191,7 @@ class TodoService:
             self._last_tick = now
             return False
         last = self._last_tick
-        if last is not None and (now - last).total_seconds() > SUSPEND_GAP_SECONDS:
+        if detect_suspend and last is not None and (now - last).total_seconds() > SUSPEND_GAP_SECONDS:
             self._close_at(running, last)
             self._save()
             return True

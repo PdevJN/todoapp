@@ -3,6 +3,7 @@
 保存先は一時ディレクトリで、操作後の結果は`todos.json`の再読込で確認する。
 """
 
+import json
 from datetime import date, timedelta
 
 from nicegui import ui
@@ -586,3 +587,18 @@ async def test_dropping_a_row_in_category_list_reorders_categories_after_fixed_u
     _drop_row(app_user, fixed_rows=1, old_index=1, new_index=3)  # 添字0は固定の「未定」行
 
     assert [category.name for category in app_env.todos().categories] == ["B", "C", "A"]
+
+
+# --- 設定 ---------------------------------------------------------------------------------
+
+
+async def test_settings_dialog_toggles_suspend_detection_and_saves_to_config(app_user: User, app_env: AppEnv) -> None:
+    config_path = app_env.directory / "config.json"
+    await app_user.open("/")
+
+    await press(app_user, "o")
+    await shows(app_user, "スリープ検知")
+    app_user.find(kind=ui.checkbox).click()
+    click_displayed(app_user, "保存")
+
+    assert json.loads(config_path.read_text(encoding="utf-8"))["suspend_detection"] is True

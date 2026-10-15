@@ -23,3 +23,18 @@ def test_recover_interrupted_run_stops_leftover_running_record_at_last_alive_tim
 
     (record,) = repository.load().records
     assert record.end_time == datetime(2026, 10, 10, 9, 45)
+
+
+def test_shutdown_app_stops_running_record_and_saves_alive_time(tmp_path: Path) -> None:
+    repository = JsonTodoRepository(tmp_path / "todos.json")
+    item = TodoItem(name="作業", schedule_type=ScheduleType.DAILY, anchor_date=date(2026, 10, 10))
+    repository.save(AppData(items=[item], records=[ExecutionRecord(item.id, item.name, datetime(2026, 10, 10, 9))]))
+    alive_store = AliveRepository(tmp_path / "alive.json")
+    service = main.recover_interrupted_run(repository, AliveRepository(tmp_path / "none.json"))
+    service.start(item.id)
+
+    main.shutdown_app(service, alive_store)
+
+    assert service.running_record() is None
+    assert all(record.end_time is not None for record in repository.load().records)
+    assert alive_store.load() is not None
