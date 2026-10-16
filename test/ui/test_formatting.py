@@ -1,3 +1,5 @@
+from datetime import date
+
 from todoapp.ui.formatting import (
     estimate_to_hours_minutes,
     format_duration,
@@ -5,6 +7,7 @@ from todoapp.ui.formatting import (
     format_estimate_cell,
     format_gap,
     format_hhmm,
+    format_weekday,
     format_work_balance,
     gap_background,
     hours_minutes_to_estimate,
@@ -156,3 +159,9 @@ def test_format_hhmm_rounds_seconds_half_up_to_minutes() -> None:
 def test_format_hhmm_carries_minutes_into_hours() -> None:
     assert format_hhmm(3570) == "01:00"
     assert format_hhmm(3600 * 25) == "25:00"
+
+
+def test_format_weekday_covers_monday_to_sunday() -> None:
+    assert [format_weekday(date(2026, 10, 12 + i)) for i in range(7)] == [
+        "(月)", "(火)", "(水)", "(木)", "(金)", "(土)", "(日)"
+    ]

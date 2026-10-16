@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 SCHEDULE_LABELS = {
     "daily": "毎日",
     "weekly": "週次",
@@ -93,3 +95,11 @@ def gap_background(gap_seconds: float | None, estimate_seconds: float | None) ->
     alpha = round(_GAP_MIN_ALPHA + _GAP_ALPHA_RANGE * ratio, 3)
     rgb = _GAP_OVER_RGB if gap_seconds > 0 else _GAP_UNDER_RGB
     return f"rgba({rgb}, {alpha})"
+
+
+WEEKDAY_LABELS = ("月", "火", "水", "木", "金", "土", "日")
+
+
+def format_weekday(day: date) -> str:
+    """日付の曜日を`(月)`の形式で返す。"""
+    return f"({WEEKDAY_LABELS[day.weekday()]})"
