@@ -12,7 +12,7 @@ from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, DoneFilter, ScheduleType
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
-from todoapp.ui.formatting import DONE_FILTER_LABELS, DONE_TEXT_CLASSES, SCHEDULE_LABELS, SKIPPED_TEXT_CLASSES, format_duration, format_estimate, format_work_balance
+from todoapp.ui.formatting import DONE_FILTER_LABELS, DONE_TEXT_CLASSES, SCHEDULE_LABELS, SKIPPED_TEXT_CLASSES, format_duration, format_estimate, format_weekday, format_work_balance
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 
 _THEME_ACTIVE_COLOR = "primary"
@@ -90,6 +90,7 @@ class MainView:
                 self._date_input = ui.input(
                     value=self._state.view_date.isoformat(), on_change=self._on_view_date_change
                 ).props("type=date dense")
+                self._weekday_label = ui.label(format_weekday(self._state.view_date))
                 ui.button(icon="chevron_right", on_click=lambda: self.shift_view_date(1)).props("flat dense round")
                 self._work_balance_label = ui.label("").classes("text-sm ml-2")
                 with self._work_balance_label:
@@ -238,6 +239,7 @@ class MainView:
         if not e.value:
             return
         self._state.view_date = date.fromisoformat(e.value)
+        self._weekday_label.set_text(format_weekday(self._state.view_date))
         # 表示が切り替わると見えなくなるアイテムが選択されたままにならないよう、選択を解除する
         self._select_all_active = False
         self._state.select(None)

@@ -24,6 +24,7 @@ from test.ui.harness import (
     shows,
 )
 from todoapp.domain.models import Category, ScheduleType
+from todoapp.ui.formatting import format_weekday
 from todoapp.ui.vendor.sortable_table.sortable_table import SortableTable
 
 TODAY = date.today()
@@ -462,6 +463,15 @@ async def test_shift_arrow_moves_view_date_and_shows_items_of_that_day(app_user:
     await shows(app_user, "明日の予定")
     await press(app_user, "ArrowLeft", shift=True)
     await hides(app_user, "明日の予定")
+
+
+async def test_weekday_label_follows_view_date(app_user: User, app_env: AppEnv) -> None:
+    await app_user.open("/")
+    await shows(app_user, format_weekday(TODAY))
+
+    await press(app_user, "ArrowRight", shift=True)
+
+    await shows(app_user, format_weekday(TOMORROW))
 
 
 async def test_read_only_view_ignores_run_cancel_and_done_but_allows_selection(app_user: User, app_env: AppEnv) -> None:
