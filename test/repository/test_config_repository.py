@@ -141,3 +141,23 @@ def test_load_returns_defaults_and_quarantines_when_corrupt(tmp_path: Path) -> N
 
     assert config == AppConfig()
     assert list(tmp_path.glob("config.json.corrupt-*"))
+
+
+def test_suspend_detection_is_disabled_by_default(tmp_path: Path) -> None:
+    assert ConfigRepository(path=tmp_path / "config.json").load().suspend_detection is False
+    assert AppConfig().suspend_detection is False
+
+
+def test_save_then_load_roundtrips_suspend_detection(tmp_path: Path) -> None:
+    repository = ConfigRepository(path=tmp_path / "config.json")
+    repository.save(AppConfig(suspend_detection=True))
+
+    assert repository.load().suspend_detection is True
+
+
+def test_load_falls_back_to_disabled_for_invalid_suspend_detection(tmp_path: Path) -> None:
+    path = tmp_path / "config.json"
+    invalid_values: list[object] = ["true", 1, None, [], {}]
+    for invalid in invalid_values:
+        path.write_text(json.dumps({"suspend_detection": invalid}), encoding="utf-8")
+        assert ConfigRepository(path=path).load().suspend_detection is False

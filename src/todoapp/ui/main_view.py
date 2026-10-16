@@ -30,6 +30,7 @@ class MainView:
         initial_theme: Theme,
         open_help: Callable[[], None],
         get_standard_work_hours: Callable[[], float],
+        get_suspend_detection: Callable[[], bool],
     ) -> None:
         self._service = service
         self._state = state
@@ -40,6 +41,7 @@ class MainView:
         self._theme_actions: dict[Theme, FabAction] = {}
         self._open_help = open_help
         self._get_standard_work_hours = get_standard_work_hours
+        self._get_suspend_detection = get_suspend_detection
         self._new_item_input: ui.input | None = None
         self._running_indicator: ui.row | None = None
         self._running_name_label: ui.label | None = None
@@ -271,8 +273,8 @@ class MainView:
             self._apply_over_estimate_color(self._elapsed_label, running.item_id)
 
     def _watch_running(self) -> None:
-        """実行中の見守り: 0:00を跨いだ記録の分割、スリープ等で止まっていた場合の停止、表示日の追従。"""
-        suspended = self._service.keep_alive()
+        """実行中の見守り: 0:00を跨いだ記録の分割、スリープ等で止まっていた場合の停止(設定で有効な場合)、表示日の追従。"""
+        suspended = self._service.keep_alive(detect_suspend=self._get_suspend_detection())
         rolled = self._state.roll_over(date.today())
         if rolled:
             # 日付入力も新しい表示日に揃える(変更ハンドラが選択解除と再描画を行う)

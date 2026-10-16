@@ -78,8 +78,9 @@ def build_app_ui(
         config.week_start = week_start
         config_repository.save(config)
 
-    def _on_standard_work_hours_save(hours: float) -> None:
+    def _on_settings_save(hours: float, suspend_detection: bool) -> None:
         config.standard_work_hours = hours
+        config.suspend_detection = suspend_detection
         config_repository.save(config)
         refresh_all()
 
@@ -242,10 +243,13 @@ def build_app_ui(
         initial_theme=config.theme,
         open_help=help_dialog.open,
         get_standard_work_hours=lambda: config.standard_work_hours,
+        get_suspend_detection=lambda: config.suspend_detection,
     )
     list_view = ListView(service, state, refresh_all=refresh_all)
     edit_dialog = EditDialog(service, refresh_all=refresh_all, get_standard_work_hours=lambda: config.standard_work_hours)
-    settings_dialog = SettingsDialog(lambda: config.standard_work_hours, _on_standard_work_hours_save)
+    settings_dialog = SettingsDialog(
+        lambda: config.standard_work_hours, lambda: config.suspend_detection, _on_settings_save
+    )
     record_timeline_dialog = RecordTimelineDialog(service, refresh_all=refresh_all)
     log_view = LogView(service, state, open_timeline_edit=record_timeline_dialog.open_for)
     record_edit_dialog = RecordEditDialog(service, refresh_all=refresh_all)
@@ -343,13 +347,19 @@ def recover_interrupted_run(repository: JsonTodoRepository, alive_store: AliveSt
     return service
 
 
+def shutdown_app(service: TodoService, alive_store: AliveStore) -> None:
+    """正常終了時に、実行中の記録を停止し、終了の直前まで動作していたものとして生存時刻を保存する。"""
+    service.stop_on_shutdown()
+    alive_store.save(datetime.now())
+
+
 def main() -> None:
     install_stderr_filter()
     alive_store = AliveRepository()
     global _shared_service
     _shared_service = recover_interrupted_run(JsonTodoRepository(), alive_store)
-    # 正常に終了するときは、終了の直前まで動作していたものとして記録する
-    app.on_shutdown(lambda: alive_store.save(datetime.now()))
+    service = _shared_service
+    app.on_shutdown(lambda: shutdown_app(service, alive_store))
     ui.run(native=True, window_size=(620, 720), title="TODO", language="ja", reload=False)
 
 
