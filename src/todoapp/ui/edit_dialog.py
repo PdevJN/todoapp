@@ -14,6 +14,7 @@ from todoapp.ui.formatting import (
     format_work_balance,
     hours_minutes_to_estimate,
 )
+from todoapp.ui.link_rows_editor import LinkRowsEditor
 
 # ui.selectのoption/selected-itemスロットでPRJコード・種別をバッジ表示するため、
 # ラベル文字列にこの区切り文字で埋め込む(_props["options"]への直接介入は
@@ -39,6 +40,7 @@ class EditDialog(DialogMixin):
         self._get_standard_work_hours = get_standard_work_hours
         self._refresh_all = refresh_all
         self._item_id: str | None = None
+        self._link_editor = LinkRowsEditor()
 
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-96 gap-2"):
@@ -97,6 +99,7 @@ class EditDialog(DialogMixin):
                 "selected-item",
                 r"""<q-badge :color="props.opt.label.split('\u001f')[3]">{{ props.opt.label.split('\u001f')[0] }}</q-badge>""",
             )
+            self._link_editor.build()
             with ui.row().classes("w-full justify-between mt-2"):
                 ui.button("削除", on_click=self._delete).props("flat color=negative")
                 with ui.row().classes("gap-2"):
@@ -124,6 +127,7 @@ class EditDialog(DialogMixin):
             {c.id: _category_label(c.name, c.prj_code, c.kind, c.color) for c in self._service.categories}
         )
         self._category_select.set_options(category_options, value=item.category_id)
+        self._link_editor.load(item.links, self._service.link_templates)
         self._update_anchor_visibility()
         self._update_work_balance()
         self.dialog.open()
@@ -159,6 +163,9 @@ class EditDialog(DialogMixin):
         if error is not None:
             ui.notify(error, type="warning")
             return
+        links = self._link_editor.collect()
+        if links is None:
+            return
         schedule_type = ScheduleType(self._schedule_select.value)
         anchor_date = (
             date.fromisoformat(self._anchor_input.value)
@@ -179,6 +186,7 @@ class EditDialog(DialogMixin):
             ),
         )
         self._service.set_item_category(self._item_id, self._category_select.value)
+        self._service.set_item_links(self._item_id, links)
         self.dialog.close()
         self._refresh_all()
 

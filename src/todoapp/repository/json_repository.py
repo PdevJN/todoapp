@@ -6,16 +6,24 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from todoapp.domain.models import AppData, Category, ExecutionRecord, TodoItem
+from todoapp.domain.models import AppData, Category, ExecutionRecord, LinkTemplate, TodoItem
 from todoapp.repository.safe_io import atomic_write_text, backup_path, quarantine
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DEFAULT_PATH = Path.home() / ".todoapp" / "todos.json"
 
 # 旧バージョンの辞書を、1つ新しいバージョンの辞書へ変換する関数。キーは変換元のバージョン
 Migration = Callable[[dict[str, Any]], dict[str, Any]]
-MIGRATIONS: dict[int, Migration] = {}
+
+
+def _migrate_v1_to_v2(raw: dict[str, Any]) -> dict[str, Any]:
+    """v2でリンクテンプレート(`link_templates`)とアイテムのリンク(`links`)を追加した。"""
+    items = [{**item, "links": []} for item in raw["items"]]
+    return {**raw, "version": 2, "items": items, "link_templates": []}
+
+
+MIGRATIONS: dict[int, Migration] = {1: _migrate_v1_to_v2}
 
 
 class UnsupportedSchemaVersionError(Exception):
@@ -71,7 +79,8 @@ class JsonTodoRepository:
         items = [TodoItem.from_dict(item) for item in raw["items"]]
         records = [ExecutionRecord.from_dict(record) for record in raw["records"]]
         categories = [Category.from_dict(category) for category in raw.get("categories", [])]
-        return AppData(items=items, records=records, categories=categories)
+        link_templates = [LinkTemplate.from_dict(template) for template in raw.get("link_templates", [])]
+        return AppData(items=items, records=records, categories=categories, link_templates=link_templates)
 
     def save(self, data: AppData) -> None:
         payload = {
@@ -79,5 +88,6 @@ class JsonTodoRepository:
             "items": [item.to_dict() for item in data.items],
             "records": [record.to_dict() for record in data.records],
             "categories": [category.to_dict() for category in data.categories],
+            "link_templates": [template.to_dict() for template in data.link_templates],
         }
         atomic_write_text(self._path, json.dumps(payload, ensure_ascii=False, indent=2), backup=True)

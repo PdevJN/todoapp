@@ -439,3 +439,17 @@ def test_a_without_modifier_does_nothing(h: Harness) -> None:
     h.press("a")
 
     assert not any(h.called(n) for n in h.cb if n.startswith("select_all_"))
+
+
+def test_u_opens_link_templates_on_main_screen(h: Harness) -> None:
+    h.press("u")
+    assert h.called("open_link_templates")
+
+
+def test_u_is_ignored_on_list_screen_or_with_dialog_open(h: Harness) -> None:
+    h.state.screen = Screen.LIST
+    h.press("u")
+    h.state.screen = Screen.MAIN
+    h.set_true("is_dialog_open")
+    h.press("u")
+    assert not h.called("open_link_templates")
