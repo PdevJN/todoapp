@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from todoapp.domain.models import AppData, ExecutionRecord, ScheduleType, TodoItem
-from todoapp.repository.json_repository import JsonTodoRepository, UnsupportedSchemaVersionError
+from todoapp.domain.models import AppData, ExecutionRecord, ItemLink, LinkTemplate, ScheduleType, TodoItem
+from todoapp.repository.json_repository import SCHEMA_VERSION, JsonTodoRepository, UnsupportedSchemaVersionError
 
 
 def test_load_returns_empty_app_data_when_file_missing(tmp_path: Path) -> None:
@@ -124,7 +124,7 @@ def _rename_legacy_name(raw: dict[str, Any]) -> dict[str, Any]:
         TodoItem(name=i["legacy_name"], schedule_type=ScheduleType.DAILY, anchor_date=date(2026, 8, 24)).to_dict()
         for i in raw["items"]
     ]
-    return {**raw, "version": 1, "items": items}
+    return {**raw, "version": SCHEMA_VERSION, "items": items}
 
 
 def test_load_migrates_old_version_and_keeps_pre_migration_copy(tmp_path: Path) -> None:
@@ -159,7 +159,7 @@ def test_load_applies_migrations_in_order(tmp_path: Path) -> None:
 
 def test_load_rejects_newer_version_without_touching_file(tmp_path: Path) -> None:
     path = tmp_path / "todos.json"
-    _write_raw(path, version=2)
+    _write_raw(path, version=SCHEMA_VERSION + 1)
     original = path.read_text(encoding="utf-8")
 
     with pytest.raises(UnsupportedSchemaVersionError):
@@ -177,3 +177,39 @@ def test_load_rejects_old_version_without_migration(tmp_path: Path) -> None:
         JsonTodoRepository(path=path).load()
 
     assert path.exists()
+
+
+def test_save_then_load_roundtrips_links_and_templates(tmp_path: Path) -> None:
+    repository = JsonTodoRepository(path=tmp_path / "todos.json")
+    template = LinkTemplate(name="Jira", url_template="https://example.com/{project}/{id}")
+    item = TodoItem(
+        name="散歩",
+        schedule_type=ScheduleType.DAILY,
+        anchor_date=date(2026, 8, 24),
+        links=[
+            ItemLink(name="チケット", template_id=template.id, values={"project": "P", "id": "1"}),
+            ItemLink(name="資料", url="https://example.com/doc"),
+        ],
+    )
+    data = AppData(items=[item], records=[], link_templates=[template])
+    repository.save(data)
+
+    assert repository.load() == data
+    assert json.loads((tmp_path / "todos.json").read_text(encoding="utf-8"))["version"] == 2
+
+
+def test_load_migrates_v1_file_and_keeps_pre_migration_copy(tmp_path: Path) -> None:
+    path = tmp_path / "todos.json"
+    item = {"id": "i1", "name": "散歩", "schedule_type": "daily", "anchor_date": "2026-08-24", "estimate_hours": 0.0}
+    path.write_text(
+        json.dumps({"version": 1, "items": [item], "records": [], "categories": []}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    original = path.read_text(encoding="utf-8")
+
+    loaded = JsonTodoRepository(path=path).load()
+
+    assert loaded.items[0].name == "散歩"
+    assert loaded.items[0].links == []
+    assert loaded.link_templates == []
+    assert (tmp_path / "todos.json.v1.bak").read_text(encoding="utf-8") == original

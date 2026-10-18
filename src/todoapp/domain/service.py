@@ -11,12 +11,15 @@ from todoapp.domain.models import (
     Category,
     DoneFilter,
     ExecutionRecord,
+    ItemLink,
+    LinkTemplate,
     ScheduleType,
     TodoItem,
     is_done,
     is_due_today,
     is_skipped,
     matches_done_filter,
+    resolve_link_url,
     today_estimate_seconds,
 )
 
@@ -77,6 +80,10 @@ class TodoService:
     def categories(self) -> list[Category]:
         return self._data.categories
 
+    @property
+    def link_templates(self) -> list[LinkTemplate]:
+        return self._data.link_templates
+
     def _save(self) -> None:
         self._repository.save(self._data)
 
@@ -97,6 +104,12 @@ class TodoService:
             if category.id == category_id:
                 return category
         raise KeyError(category_id)
+
+    def _find_link_template(self, template_id: str) -> LinkTemplate:
+        for template in self._data.link_templates:
+            if template.id == template_id:
+                return template
+        raise KeyError(template_id)
 
     def add_item(
         self,
@@ -442,6 +455,37 @@ class TodoService:
         item = self._find_item(item_id)
         item.category_id = category_id
         self._save()
+
+    def add_link_template(self, name: str, url_template: str) -> LinkTemplate:
+        template = LinkTemplate(name=name, url_template=url_template)
+        self._data.link_templates.append(template)
+        self._save()
+        return template
+
+    def edit_link_template(self, template_id: str, *, name: str, url_template: str) -> None:
+        template = self._find_link_template(template_id)
+        template.name = name
+        template.url_template = url_template
+        self._save()
+
+    def linked_link_count(self, template_ids: Iterable[str]) -> int:
+        ids = set(template_ids)
+        return sum(1 for item in self._data.items for link in item.links if link.template_id in ids)
+
+    def delete_link_templates(self, template_ids: Iterable[str]) -> None:
+        """テンプレートを削除する。それを使うリンクも、値だけでは開けないためアイテムから削除する。"""
+        ids = set(template_ids)
+        self._data.link_templates = [t for t in self._data.link_templates if t.id not in ids]
+        for item in self._data.items:
+            item.links = [link for link in item.links if link.template_id not in ids]
+        self._save()
+
+    def set_item_links(self, item_id: str, links: list[ItemLink]) -> None:
+        self._find_item(item_id).links = links
+        self._save()
+
+    def link_url(self, link: ItemLink) -> str | None:
+        return resolve_link_url(link, self._data.link_templates)
 
     def category_for_item(self, item_id: str) -> Category | None:
         item = next((i for i in self._data.items if i.id == item_id), None)

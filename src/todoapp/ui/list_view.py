@@ -10,6 +10,7 @@ from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, ScheduleType, has_contro
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
+from todoapp.ui.item_links import build_link_entries, open_link
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 from todoapp.ui.vendor.sortable_table.sortable_table import SortableTable
 
@@ -56,6 +57,7 @@ class ListView:
             # QTableは既定でチェックボックス以外の行クリックでは選択されないため、
             # 行のどこをクリックしても選択できるようにrowClickでも選択状態を反映する
             self.table.on("rowClick", self._on_row_click, args=[[], ["id"]])
+            self.table.on("openLink", self._on_open_link)
             # メインパネルと同様に、アイテム名の隣にスケジュール種別をバッジで併記する
             self.table.add_slot(
                 "body-cell-name",
@@ -68,6 +70,18 @@ class ListView:
                         <q-badge outline :color="props.row.category_color">
                             <span v-if="props.row.category_expired">❗️</span>{{ props.row.category_label }}
                         </q-badge>
+                        <q-btn v-if="props.row.links.length" flat dense round size="sm" icon="link"
+                               @click.stop="props.row.links.length === 1 && $parent.$emit('openLink', {id: props.row.id, link: props.row.links[0].id})">
+                            <q-tooltip>{{ props.row.links.map(l => l.label).join(' / ') }}</q-tooltip>
+                            <q-menu v-if="props.row.links.length > 1">
+                                <q-list dense style="min-width: 8rem">
+                                    <q-item v-for="l in props.row.links" :key="l.id" clickable dense v-close-popup class="text-body2"
+                                            @click.stop="$parent.$emit('openLink', {id: props.row.id, link: l.id})">
+                                        <q-item-section>{{ l.label }}</q-item-section>
+                                    </q-item>
+                                </q-list>
+                            </q-menu>
+                        </q-btn>
                     </div>
                 </q-td>
                 """,
@@ -93,6 +107,12 @@ class ListView:
         if 0 <= old_index < len(ids) and 0 <= new_index < len(ids) and old_index != new_index:
             self._service.move_item_to(ids[old_index], ids[new_index])
         self._refresh_all()
+
+    def _on_open_link(self, e: GenericEventArguments) -> None:
+        item = next((i for i in self._service.items if i.id == e.args["id"]), None)
+        link = next((link for link in item.links if link.id == e.args["link"]), None) if item else None
+        if link is not None:
+            open_link(self._service.link_url(link))
 
     def _on_select(self, e: TableSelectionEventArguments) -> None:
         self._state.select_items({row["id"] for row in e.selection})
@@ -170,6 +190,10 @@ class ListView:
                     "category_label": category.name if category else "未定",
                     "category_color": category.color if category else "grey",
                     "category_expired": bool(category and is_category_expired(category, today)),
+                    "links": [
+                        {"id": entry.link_id, "label": entry.label}
+                        for entry in build_link_entries(item, self._service.link_templates)
+                    ],
                 }
             )
         self._rendered_ids = [str(row["id"]) for row in rows]

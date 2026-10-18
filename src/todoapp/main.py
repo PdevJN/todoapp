@@ -31,6 +31,7 @@ from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.edit_dialog import EditDialog
 from todoapp.ui.help_dialog import HelpDialog
 from todoapp.ui.keyboard import SHORTCUT_KEYS, KeyboardController
+from todoapp.ui.link_template_dialog import LinkTemplateDialog
 from todoapp.ui.list_view import ListView
 from todoapp.ui.log_view import LogView
 from todoapp.ui.main_view import MainView
@@ -146,6 +147,7 @@ def build_app_ui(
         calendar_view.refresh()
         category_list_dialog.refresh()
         category_summary_dialog.refresh()
+        link_template_dialog.refresh()
 
     def toggle_done_selected_items() -> None:
         ids = set(state.selected_item_ids) or ({state.selected_item_id} if state.selected_item_id else set())
@@ -222,6 +224,7 @@ def build_app_ui(
             do_delete()
 
     confirm_dialog = ConfirmDialog()
+    link_template_dialog = LinkTemplateDialog(service, refresh_all=refresh_all, confirm_dialog=confirm_dialog)
     category_kind_dialog = CategoryKindDialog(service, refresh_all=refresh_all)
     category_list_dialog = CategoryListDialog(
         service,
@@ -277,6 +280,7 @@ def build_app_ui(
     confirm_dialog.build()
     help_dialog.build()
     settings_dialog.build()
+    link_template_dialog.build()
 
     main_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.MAIN)
     list_root.bind_visibility_from(state, "screen", backward=lambda s: s is Screen.LIST)
@@ -295,6 +299,7 @@ def build_app_ui(
         confirm_dialog,
         help_dialog,
         settings_dialog,
+        link_template_dialog,
     ]
 
     keyboard = KeyboardController(
@@ -311,6 +316,7 @@ def build_app_ui(
         open_category_edit_dialog=category_edit_dialog.open_for,
         open_category_summary=category_summary_dialog.open,
         open_settings=settings_dialog.open,
+        open_link_templates=link_template_dialog.open,
         shift_view_date=main_view.shift_view_date,
         toggle_done_selected_items=toggle_done_selected_items,
         skip_selected_items=skip_selected_items,

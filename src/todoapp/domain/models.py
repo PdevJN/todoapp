@@ -5,10 +5,12 @@ import random
 import re
 import unicodedata
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import Enum
 from typing import Any
+from urllib.parse import quote
 
 
 class ScheduleType(str, Enum):
@@ -26,6 +28,14 @@ CATEGORY_KIND_MAX_LENGTH = 20
 CATEGORY_PRJ_CODE_MAX_LENGTH = 20
 UNCATEGORIZED_NAME = "未定"
 _PRJ_CODE_PATTERN = re.compile(r"[A-Za-z0-9_.\-]*")
+LINK_TEMPLATE_NAME_MAX_LENGTH = 30
+LINK_NAME_MAX_LENGTH = 30
+LINK_URL_MAX_LENGTH = 500
+LINK_VALUE_MAX_LENGTH = 200
+LINK_RESOLVED_URL_MAX_LENGTH = 2000
+LINK_MAX_PLACEHOLDERS = 5
+_PLACEHOLDER_PATTERN = re.compile(r"\{([A-Za-z0-9_]+)\}")
+_URL_SCHEMES = ("http://", "https://")
 
 CATEGORY_COLORS = [
     "red",
@@ -73,6 +83,50 @@ class Category:
         )
 
 
+@dataclass
+class LinkTemplate:
+    name: str
+    url_template: str  # 例: https://example.com/{project}/issues/{id}
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"id": self.id, "name": self.name, "url_template": self.url_template}
+
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> LinkTemplate:
+        return LinkTemplate(
+            id=data.get("id") or uuid.uuid4().hex, name=data["name"], url_template=data["url_template"]
+        )
+
+
+@dataclass
+class ItemLink:
+    name: str
+    template_id: str | None = None  # Noneはテンプレートを使わず、`url`を直接開く
+    url: str = ""
+    values: dict[str, str] = field(default_factory=dict)  # テンプレート使用時の{置換項目名: 値}
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "template_id": self.template_id,
+            "url": self.url,
+            "values": dict(self.values),
+        }
+
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> ItemLink:
+        return ItemLink(
+            id=data.get("id") or uuid.uuid4().hex,
+            name=data["name"],
+            template_id=data.get("template_id"),
+            url=data.get("url", ""),
+            values=dict(data.get("values", {})),
+        )
+
+
 def has_control_chars(text: str) -> bool:
     # 制御文字(Cc)・書式制御文字(Cf: ゼロ幅文字など)・行/段落区切り(Zl・Zp)を禁止する
     return any(unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") for ch in text)
@@ -110,6 +164,99 @@ def is_category_expired(category: Category, today: date) -> bool:
     return category.expiry_date is not None and category.expiry_date < today
 
 
+def template_placeholders(url_template: str) -> list[str]:
+    """URL雛形の置換項目名を、最初に現れた順に重複なく返す。"""
+    return list(dict.fromkeys(_PLACEHOLDER_PATTERN.findall(url_template)))
+
+
+def _is_http_url(url: str) -> bool:
+    return url.lower().startswith(_URL_SCHEMES)
+
+
+def resolve_link_url(link: ItemLink, templates: Iterable[LinkTemplate]) -> str | None:
+    """リンクを開くURLを返す。置換項目が未入力・テンプレートが無い・http(s)以外の場合は`None`。"""
+    if link.template_id is None:
+        url = link.url
+    else:
+        template = next((t for t in templates if t.id == link.template_id), None)
+        if template is None:
+            return None
+        names = template_placeholders(template.url_template)
+        if any(not link.values.get(name, "").strip() for name in names):
+            return None
+        url = _PLACEHOLDER_PATTERN.sub(lambda m: quote(link.values[m.group(1)], safe=""), template.url_template)
+    return url if _is_http_url(url) else None
+
+
+def _validate_url_text(label: str, url: str) -> str | None:
+    if not url:
+        return f"{label}を入力してください"
+    if has_control_chars(url):
+        return f"{label}に制御文字は使えません"
+    if "｛" in url or "｝" in url:
+        return f"{label}に全角の｛ ｝は使えません。半角の {{ }} を使ってください"
+    if not url.isascii():
+        return f"{label}に全角などASCII以外の文字は使えません(日本語はエンコード済みの形で入力してください)"
+    if any(ch.isspace() for ch in url):
+        return f"{label}に空白は使えません"
+    if len(url) > LINK_URL_MAX_LENGTH:
+        return f"{label}は{LINK_URL_MAX_LENGTH}文字以内で入力してください"
+    if not _is_http_url(url):
+        return f"{label}は http:// または https:// で始めてください"
+    return None
+
+
+def _validate_label_text(label: str, text: str, limit: int) -> str | None:
+    if not text:
+        return f"{label}を入力してください"
+    if has_control_chars(text):
+        return f"{label}に制御文字は使えません"
+    if len(text) > limit:
+        return f"{label}は{limit}文字以内で入力してください"
+    return None
+
+
+def validate_link_template_fields(name: str, url_template: str) -> str | None:
+    """リンクテンプレートの入力値を検証する。問題があればその内容(表示用メッセージ)を、無ければNoneを返す。"""
+    error = _validate_label_text("テンプレート名", name, LINK_TEMPLATE_NAME_MAX_LENGTH)
+    if error is not None:
+        return error
+    error = _validate_url_text("URL雛形", url_template)
+    if error is not None:
+        return error
+    leftover = _PLACEHOLDER_PATTERN.sub("", url_template)
+    if "{" in leftover or "}" in leftover:
+        return "置換項目は {名前}(名前は半角英数字と _ のみ)の形で書いてください"
+    count = len(template_placeholders(url_template))
+    if count == 0:
+        return "置換項目 {名前} を1つ以上入れてください"
+    if count > LINK_MAX_PLACEHOLDERS:
+        return f"置換項目は{LINK_MAX_PLACEHOLDERS}個までです"
+    return None
+
+
+def validate_item_link_fields(
+    name: str, template: LinkTemplate | None, url: str, values: dict[str, str]
+) -> str | None:
+    """アイテムのリンクの入力値を検証する。呼び出し側で前後の空白を除いた値を渡す。"""
+    # 表示名は省略できる(省略時は一覧にURLを表示する)
+    error = _validate_label_text("リンクの表示名", name, LINK_NAME_MAX_LENGTH) if name else None
+    if error is not None:
+        return error
+    if template is None:
+        return _validate_url_text("URL", url)
+    for placeholder in template_placeholders(template.url_template):
+        error = _validate_label_text(placeholder, values.get(placeholder, ""), LINK_VALUE_MAX_LENGTH)
+        if error is not None:
+            return error
+    resolved = resolve_link_url(ItemLink(name=name, template_id=template.id, values=values), [template])
+    if resolved is None:
+        return "URLを組み立てられません。テンプレートのURL雛形を確認してください"
+    if len(resolved) > LINK_RESOLVED_URL_MAX_LENGTH:
+        return f"組み立てたURLは{LINK_RESOLVED_URL_MAX_LENGTH}文字以内にしてください"
+    return None
+
+
 @dataclass
 class TodoItem:
     name: str
@@ -121,6 +268,7 @@ class TodoItem:
     category_id: str | None = None
     done_date: date | None = None  # 完了した日(最後に完了にした日)。判定はis_done()を使う
     skip_date: date | None = None  # スキップした日(繰り返しのアイテムのみ有効)。判定はis_skipped()を使う
+    links: list[ItemLink] = field(default_factory=list)
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def to_dict(self) -> dict[str, Any]:
@@ -135,6 +283,7 @@ class TodoItem:
             "category_id": self.category_id,
             "done_date": self.done_date.isoformat() if self.done_date else None,
             "skip_date": self.skip_date.isoformat() if self.skip_date else None,
+            "links": [link.to_dict() for link in self.links],
         }
 
     @staticmethod
@@ -153,6 +302,7 @@ class TodoItem:
             category_id=data.get("category_id"),
             done_date=date.fromisoformat(done_date) if done_date else None,
             skip_date=date.fromisoformat(skip_date) if skip_date else None,
+            links=[ItemLink.from_dict(link) for link in data.get("links", [])],
         )
 
 
@@ -198,6 +348,7 @@ class AppData:
     items: list[TodoItem]
     records: list[ExecutionRecord]
     categories: list[Category] = field(default_factory=list)
+    link_templates: list[LinkTemplate] = field(default_factory=list)
 
 
 def _clamped_day(anchor_day: int, target: date) -> int:

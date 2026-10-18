@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from todoapp.domain.models import AppData, DoneFilter, ScheduleType
+from todoapp.domain.models import AppData, DoneFilter, ItemLink, ScheduleType
 from todoapp.domain.service import ItemGapRow, TodoService
 
 
@@ -1281,3 +1281,50 @@ def test_move_category_to_unknown_id_raises_without_changing_order() -> None:
         service.move_category_to("unknown", a.id)
 
     assert [x.name for x in service.categories] == ["A", "B"]
+
+
+def test_add_and_edit_link_template_saves() -> None:
+    service, repository, _ = _service()
+    template = service.add_link_template("Jira", "https://example.com/{id}")
+    assert service.link_templates == [template]
+    service.edit_link_template(template.id, name="Jira2", url_template="https://example.com/{project}/{id}")
+    assert (template.name, template.url_template) == ("Jira2", "https://example.com/{project}/{id}")
+    assert repository.saved is not None
+    assert repository.saved.link_templates == [template]
+
+
+def test_set_item_links_replaces_links_and_saves() -> None:
+    service, repository, _ = _service()
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    links = [ItemLink(name="資料", url="https://example.com/doc")]
+    service.set_item_links(item.id, links)
+    assert item.links == links
+    assert repository.saved is not None
+    assert repository.saved.items[0].links == links
+
+
+def test_link_url_resolves_through_registered_templates() -> None:
+    service, _, _ = _service()
+    template = service.add_link_template("Jira", "https://example.com/{id}")
+    link = ItemLink(name="t", template_id=template.id, values={"id": "9"})
+    assert service.link_url(link) == "https://example.com/9"
+
+
+def test_delete_link_templates_removes_links_that_use_them() -> None:
+    service, _, _ = _service()
+    jira = service.add_link_template("Jira", "https://example.com/{id}")
+    wiki = service.add_link_template("Wiki", "https://wiki.example.com/{id}")
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    other = service.add_item("B", ScheduleType.DAILY, date(2026, 8, 30))
+    keep = ItemLink(name="資料", url="https://example.com/doc")
+    service.set_item_links(item.id, [ItemLink(name="j", template_id=jira.id, values={"id": "1"}), keep])
+    service.set_item_links(other.id, [ItemLink(name="w", template_id=wiki.id, values={"id": "2"})])
+
+    assert service.linked_link_count([jira.id]) == 1
+    assert service.linked_link_count([jira.id, wiki.id]) == 2
+
+    service.delete_link_templates([jira.id])
+
+    assert service.link_templates == [wiki]
+    assert item.links == [keep]
+    assert len(other.links) == 1
