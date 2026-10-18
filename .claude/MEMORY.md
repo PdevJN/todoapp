@@ -4,7 +4,7 @@
 
 ## 現在のブランチ
 
-`develop`(`origin/develop`と同期・作業ツリーはクリーン)。マージ済みのローカルブランチ(`docs/update-work-memory-6`・`feature/suspend-detection-option`・`feature/view-date-weekday`)が残っている(削除はユーザーの指示待ち)。
+`develop`(`origin/develop`と同期・作業ツリーはクリーン)。featureブランチは残っていない(マージ済みのローカルブランチは削除済み)。
 
 ## 直近の作業(2026-10-19)
 
