@@ -9,7 +9,7 @@ from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, ScheduleType, has_control_chars, is_category_expired, is_done, is_skipped
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
-from todoapp.ui.formatting import SCHEDULE_LABELS, format_duration
+from todoapp.ui.formatting import SCHEDULE_LABELS, carried_badge_text, format_duration
 from todoapp.ui.item_links import build_link_entries, open_link
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 from todoapp.ui.vendor.sortable_table.sortable_table import SortableTable
@@ -67,6 +67,7 @@ class ListView:
                         <span style="word-break: break-all" :style="props.row.done ? 'text-decoration: line-through; color: #9e9e9e' : props.row.skipped ? 'color: #9e9e9e' : ''">{{ props.row.name }}</span>
                         <q-badge outline color="primary">{{ props.row.schedule }}</q-badge>
                         <q-badge v-if="props.row.skipped" outline color="grey">スキップ</q-badge>
+                        <q-badge v-if="props.row.carried" outline color="orange">{{ props.row.carried }}</q-badge>
                         <q-badge outline :color="props.row.category_color">
                             <span v-if="props.row.category_expired">❗️</span>{{ props.row.category_label }}
                         </q-badge>
@@ -183,6 +184,7 @@ class ListView:
                     "name": item.name,
                     "done": is_done(item, today),
                     "skipped": is_skipped(item, today),
+                    "carried": carried_badge_text(item) or "",
                     "schedule": SCHEDULE_LABELS[item.schedule_type.value],
                     "anchor": "-" if is_undecided else item.anchor_date.strftime("%m/%d"),
                     "cumulative": format_duration(cumulative),

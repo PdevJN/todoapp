@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from todoapp.domain.models import ScheduleType, TodoItem
+
 SCHEDULE_LABELS = {
     "daily": "毎日",
     "weekly": "週次",
@@ -103,3 +105,10 @@ WEEKDAY_LABELS = ("月", "火", "水", "木", "金", "土", "日")
 def format_weekday(day: date) -> str:
     """日付の曜日を`(月)`の形式で返す。"""
     return f"({WEEKDAY_LABELS[day.weekday()]})"
+
+
+def carried_badge_text(item: TodoItem) -> str | None:
+    """繰り越したアイテムのバッジ文言。当日以外(繰越後にスケジュールを変えた場合)は表示しない。"""
+    if item.carried_from is None or item.schedule_type is not ScheduleType.ONE_TIME:
+        return None
+    return f"繰越 {item.carried_from.strftime('%m/%d')}〜"

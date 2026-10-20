@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from todoapp.domain.models import AppData, DoneFilter, ItemLink, ScheduleType
+from todoapp.domain.models import AppData, DoneFilter, ItemLink, ScheduleType, today_estimate_seconds
 from todoapp.domain.service import ItemGapRow, TodoService
 
 
@@ -1328,3 +1328,98 @@ def test_delete_link_templates_removes_links_that_use_them() -> None:
     assert service.link_templates == [wiki]
     assert item.links == [keep]
     assert len(other.links) == 1
+
+
+def test_carry_over_moves_anchor_to_tomorrow_and_keeps_remaining_estimate() -> None:
+    service, repository, clock = _service()
+    item = service.add_item("資料作成", ScheduleType.ONE_TIME, date(2026, 8, 30), estimate_hours=2.0)
+    service.start(item.id)
+    clock.advance(1800)
+    service.stop_running()
+    before = service.remaining_seconds(item.id)
+
+    carried = service.carry_over([item.id], date(2026, 8, 30))
+
+    assert carried == [item.id]
+    assert item.anchor_date == date(2026, 8, 31)
+    assert item.carried_from == date(2026, 8, 30)
+    assert service.remaining_seconds(item.id) == before == 5400
+    assert repository.saved is not None
+
+
+def test_carry_over_from_past_anchor_moves_to_today() -> None:
+    service, _, _ = _service()
+    item = service.add_item("資料作成", ScheduleType.ONE_TIME, date(2026, 8, 28), estimate_hours=2.0)
+
+    service.carry_over([item.id], date(2026, 8, 30))
+
+    assert item.anchor_date == date(2026, 8, 30)
+    assert item.carried_from == date(2026, 8, 28)
+
+
+def test_carry_over_keeps_the_first_carried_from() -> None:
+    service, _, _ = _service()
+    item = service.add_item("資料作成", ScheduleType.ONE_TIME, date(2026, 8, 28), estimate_hours=2.0)
+    service.carry_over([item.id], date(2026, 8, 30))  # 8/28 -> 8/30
+
+    service.carry_over([item.id], date(2026, 8, 30))  # 8/30 -> 8/31
+
+    assert item.anchor_date == date(2026, 8, 31)
+    assert item.carried_from == date(2026, 8, 28)
+
+
+def test_carry_over_twice_in_a_row_does_not_move_a_future_anchor_again() -> None:
+    service, _, _ = _service()
+    item = service.add_item("資料作成", ScheduleType.ONE_TIME, date(2026, 8, 30), estimate_hours=2.0)
+    service.carry_over([item.id], date(2026, 8, 30))
+
+    carried = service.carry_over([item.id], date(2026, 8, 30))
+
+    assert carried == []
+    assert item.anchor_date == date(2026, 8, 31)
+
+
+def test_carry_over_only_moves_eligible_items_in_a_mixed_selection() -> None:
+    service, _, _ = _service()
+    ok = service.add_item("対象", ScheduleType.ONE_TIME, date(2026, 8, 30), estimate_hours=1.0)
+    no_estimate = service.add_item("見積りなし", ScheduleType.ONE_TIME, date(2026, 8, 30))
+    daily = service.add_item("毎日", ScheduleType.DAILY, date(2026, 8, 30), estimate_hours=1.0)
+    done = service.add_item("完了", ScheduleType.ONE_TIME, date(2026, 8, 30), estimate_hours=1.0)
+    service.set_done([done.id], True, date(2026, 8, 30))
+
+    carried = service.carry_over([ok.id, no_estimate.id, daily.id, done.id], date(2026, 8, 30))
+
+    assert carried == [ok.id]
+    assert [i.anchor_date for i in (ok, no_estimate, daily, done)] == [date(2026, 8, 31)] + [date(2026, 8, 30)] * 3
+    assert no_estimate.carried_from is None
+
+
+def test_carry_over_returns_empty_and_does_not_save_when_nothing_is_eligible() -> None:
+    service, repository, _ = _service()
+    item = service.add_item("見積りなし", ScheduleType.ONE_TIME, date(2026, 8, 30))
+    repository.saved = None
+
+    assert service.carry_over([item.id], date(2026, 8, 30)) == []
+    assert repository.saved is None
+
+
+def test_carry_over_stops_running_item_and_keeps_its_record() -> None:
+    service, _, clock = _service()
+    item = service.add_item("資料作成", ScheduleType.ONE_TIME, date(2026, 8, 30), estimate_hours=2.0)
+    service.start(item.id)
+    clock.advance(600)
+
+    service.carry_over([item.id], date(2026, 8, 30))
+
+    assert service.running_record() is None
+    assert service.cumulative_seconds(item.id) == 600
+
+
+def test_carry_over_does_not_carry_the_today_estimate_to_the_next_day() -> None:
+    service, _, _ = _service()
+    item = service.add_item("資料作成", ScheduleType.ONE_TIME, date(2026, 8, 30), estimate_hours=2.0)
+    service.edit_item(item.id, today_estimate_hours=1.0)
+
+    service.carry_over([item.id], date(2026, 8, 30))
+
+    assert today_estimate_seconds(item, date(2026, 8, 31)) is None

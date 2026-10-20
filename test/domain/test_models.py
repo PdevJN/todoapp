@@ -1,4 +1,7 @@
 from datetime import date, datetime, timedelta
+from typing import Any
+
+import pytest
 
 from todoapp.domain.models import (
     Category,
@@ -6,6 +9,8 @@ from todoapp.domain.models import (
     ExecutionRecord,
     ScheduleType,
     TodoItem,
+    can_carry_over,
+    carry_over_target,
     is_category_expired,
     is_done,
     is_due_today,
@@ -335,3 +340,53 @@ def test_skip_date_round_trips_and_defaults_to_none() -> None:
     data = item.to_dict()
     del data["skip_date"]
     assert TodoItem.from_dict(data).skip_date is None
+
+
+_TODAY = date(2026, 8, 30)
+
+
+def _carry_item(**kwargs: Any) -> TodoItem:
+    kwargs.setdefault("schedule_type", ScheduleType.ONE_TIME)
+    kwargs.setdefault("anchor_date", _TODAY)
+    kwargs.setdefault("estimate_hours", 2.0)
+    return TodoItem(name="資料作成", **kwargs)
+
+
+def test_can_carry_over_for_unfinished_one_time_item_with_remaining_estimate() -> None:
+    assert can_carry_over(_carry_item(), _TODAY, remaining_seconds=600) is True
+
+
+def test_can_carry_over_is_false_when_estimate_is_used_up_or_unset() -> None:
+    assert can_carry_over(_carry_item(), _TODAY, remaining_seconds=0) is False
+    assert can_carry_over(_carry_item(estimate_hours=0.0), _TODAY, remaining_seconds=0) is False
+
+
+def test_can_carry_over_is_false_when_done() -> None:
+    assert can_carry_over(_carry_item(done_date=_TODAY), _TODAY, remaining_seconds=600) is False
+
+
+@pytest.mark.parametrize(
+    "schedule_type",
+    [ScheduleType.DAILY, ScheduleType.WEEKLY, ScheduleType.MONTHLY, ScheduleType.UNDECIDED],
+)
+def test_can_carry_over_is_false_for_other_schedules(schedule_type: ScheduleType) -> None:
+    assert can_carry_over(_carry_item(schedule_type=schedule_type), _TODAY, remaining_seconds=600) is False
+
+
+def test_can_carry_over_is_false_for_future_anchor_and_true_for_past_anchor() -> None:
+    assert can_carry_over(_carry_item(anchor_date=_TODAY + timedelta(days=1)), _TODAY, 600) is False
+    assert can_carry_over(_carry_item(anchor_date=_TODAY - timedelta(days=1)), _TODAY, 600) is True
+
+
+def test_carry_over_target_is_today_for_past_anchor_and_tomorrow_for_today_anchor() -> None:
+    assert carry_over_target(_carry_item(anchor_date=_TODAY - timedelta(days=3)), _TODAY) == _TODAY
+    assert carry_over_target(_carry_item(anchor_date=_TODAY), _TODAY) == _TODAY + timedelta(days=1)
+
+
+def test_carried_from_round_trips_and_defaults_to_none_for_legacy_data() -> None:
+    item = _carry_item(carried_from=date(2026, 8, 28))
+    assert TodoItem.from_dict(item.to_dict()) == item
+    assert item.to_dict()["carried_from"] == "2026-08-28"
+    legacy = {k: v for k, v in item.to_dict().items() if k != "carried_from"}
+    assert TodoItem.from_dict(legacy).carried_from is None
+    assert _carry_item().to_dict()["carried_from"] is None

@@ -15,6 +15,8 @@ from todoapp.domain.models import (
     LinkTemplate,
     ScheduleType,
     TodoItem,
+    can_carry_over,
+    carry_over_target,
     is_done,
     is_due_today,
     is_skipped,
@@ -342,6 +344,29 @@ class TodoService:
         all_skipped = all(is_skipped(item, today) for item in items)
         self.set_skipped({item.id for item in items}, not all_skipped, today)
         return True
+
+    def carry_over(self, item_ids: Iterable[str], today: date) -> list[str]:
+        """未完了で見積りが残っている当日のアイテムを次の日へ繰り越し、繰り越したidを返す(対象外は変更しない)。
+
+        見積りと累積はそのままなので、残り時間は繰越先でも続く。実行中なら停止する(記録は残す)。
+        """
+        ids = set(item_ids)
+        carried: list[str] = []
+        for item in self._data.items:
+            if item.id not in ids or not can_carry_over(item, today, self.remaining_seconds(item.id)):
+                continue
+            if item.carried_from is None:
+                item.carried_from = item.anchor_date
+            item.anchor_date = carry_over_target(item, today)
+            carried.append(item.id)
+        if not carried:
+            return []
+        running = self.running_record()
+        if running is not None and running.item_id in carried:
+            self.stop_running()
+        else:
+            self._save()
+        return carried
 
     def cumulative_seconds(self, item_id: str) -> float:
         now = self._clock()

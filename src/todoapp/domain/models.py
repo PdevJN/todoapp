@@ -7,7 +7,7 @@ import unicodedata
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Any
 from urllib.parse import quote
@@ -268,6 +268,7 @@ class TodoItem:
     category_id: str | None = None
     done_date: date | None = None  # 完了した日(最後に完了にした日)。判定はis_done()を使う
     skip_date: date | None = None  # スキップした日(繰り返しのアイテムのみ有効)。判定はis_skipped()を使う
+    carried_from: date | None = None  # 初めて繰り越したときの元の基準日(当日のアイテムのみ有効)
     links: list[ItemLink] = field(default_factory=list)
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
@@ -283,6 +284,7 @@ class TodoItem:
             "category_id": self.category_id,
             "done_date": self.done_date.isoformat() if self.done_date else None,
             "skip_date": self.skip_date.isoformat() if self.skip_date else None,
+            "carried_from": self.carried_from.isoformat() if self.carried_from else None,
             "links": [link.to_dict() for link in self.links],
         }
 
@@ -291,6 +293,7 @@ class TodoItem:
         done_date = data.get("done_date")
         today_estimate_date = data.get("today_estimate_date")
         skip_date = data.get("skip_date")
+        carried_from = data.get("carried_from")
         return TodoItem(
             id=data["id"],
             name=data["name"],
@@ -302,6 +305,7 @@ class TodoItem:
             category_id=data.get("category_id"),
             done_date=date.fromisoformat(done_date) if done_date else None,
             skip_date=date.fromisoformat(skip_date) if skip_date else None,
+            carried_from=date.fromisoformat(carried_from) if carried_from else None,
             links=[ItemLink.from_dict(link) for link in data.get("links", [])],
         )
 
@@ -387,6 +391,22 @@ def today_estimate_seconds(item: TodoItem, today: date) -> int | None:
     if item.today_estimate_date != today or seconds <= 0:
         return None
     return seconds
+
+
+def can_carry_over(item: TodoItem, today: date, remaining_seconds: float) -> bool:
+    """未完了で見積りが残っている当日のアイテムを、次の日へ繰り越せるか。見積りちょうど使い切った場合は対象外。"""
+    return (
+        item.schedule_type is ScheduleType.ONE_TIME
+        and not is_done(item, today)
+        and item.estimate_hours > 0
+        and remaining_seconds > 0
+        and item.anchor_date <= today
+    )
+
+
+def carry_over_target(item: TodoItem, today: date) -> date:
+    """繰越先の日。基準日が過去なら今日、今日なら翌日。"""
+    return today if item.anchor_date < today else today + timedelta(days=1)
 
 
 def matches_done_filter(item: TodoItem, today: date, done_filter: DoneFilter) -> bool:

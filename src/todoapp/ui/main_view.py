@@ -12,7 +12,7 @@ from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, DoneFilter, ScheduleType
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
-from todoapp.ui.formatting import DONE_FILTER_LABELS, DONE_TEXT_CLASSES, SCHEDULE_LABELS, SKIPPED_TEXT_CLASSES, format_duration, format_estimate, format_weekday, format_work_balance
+from todoapp.ui.formatting import DONE_FILTER_LABELS, DONE_TEXT_CLASSES, SCHEDULE_LABELS, SKIPPED_TEXT_CLASSES, carried_badge_text, format_duration, format_estimate, format_weekday, format_work_balance
 from todoapp.ui.item_links import build_link_entries, render_link_button
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
 
@@ -396,6 +396,9 @@ class MainView:
             render_link_button(build_link_entries(item, self._service.link_templates))
             if skipped:
                 ui.badge("スキップ").props("outline color=grey")
+            carried_text = carried_badge_text(item)
+            if carried_text is not None:
+                ui.badge(carried_text).props("outline color=orange")
             ui.badge(SCHEDULE_LABELS[item.schedule_type.value]).props("outline")
             if is_running:
                 assert running is not None

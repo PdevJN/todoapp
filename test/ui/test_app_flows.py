@@ -167,6 +167,64 @@ async def test_shift_s_on_non_repeating_item_warns_and_does_nothing(app_user: Us
     await shows(app_user, "今日だけ")
 
 
+async def test_r_carries_item_to_tomorrow_with_badge_and_keeps_remaining(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("資料作成", ScheduleType.ONE_TIME, estimate_hours=2.0)])
+    await app_user.open("/")
+    click_row(app_user, "資料作成")
+
+    await press(app_user, "r")
+
+    await hides(app_user, "資料作成")
+    item = app_env.todos().items[0]
+    assert item.anchor_date == TOMORROW
+    assert item.carried_from == TODAY
+    await press(app_user, "ArrowRight", shift=True)
+    await shows(app_user, "資料作成")
+    await shows(app_user, f"繰越 {TODAY.strftime('%m/%d')}〜")
+    await shows(app_user, "見積り 2時間")
+
+
+async def test_r_in_past_day_view_carries_item_to_today(app_user: User, app_env: AppEnv) -> None:
+    yesterday = TODAY - timedelta(days=1)
+    app_env.seed(items=[make_item("前日の作業", ScheduleType.ONE_TIME, anchor_date=yesterday, estimate_hours=1.0)])
+    await app_user.open("/")
+    await press(app_user, "ArrowLeft", shift=True)
+    await shows(app_user, "前日の作業")
+    click_row(app_user, "前日の作業")
+
+    await press(app_user, "r")
+
+    await hides(app_user, "前日の作業")
+    assert app_env.todos().items[0].anchor_date == TODAY
+    await press(app_user, "ArrowRight", shift=True)
+    await shows(app_user, "前日の作業")
+
+
+async def test_r_warns_when_nothing_can_be_carried(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("見積りなし", ScheduleType.ONE_TIME)])
+    await app_user.open("/")
+    click_row(app_user, "見積りなし")
+
+    await press(app_user, "r")
+
+    await app_user.should_see("繰越できるアイテムがありません")
+    assert app_env.todos().items[0].anchor_date == TODAY
+    await shows(app_user, "見積りなし")
+
+
+async def test_r_on_a_done_item_does_not_carry(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("終わった", ScheduleType.ONE_TIME, estimate_hours=1.0, done_date=TODAY)])
+    await app_user.open("/")
+    select_toggle(app_user, "すべて")
+    await shows(app_user, "終わった")
+    click_row(app_user, "終わった")
+
+    await press(app_user, "r")
+
+    await app_user.should_see("繰越できるアイテムがありません")
+    assert app_env.todos().items[0].anchor_date == TODAY
+
+
 async def test_work_balance_ignores_skipped_items_estimates(app_user: User, app_env: AppEnv) -> None:
     app_env.seed(
         items=[
