@@ -173,6 +173,21 @@ def build_app_ui(
             state.select_items(set())
         refresh_all()
 
+    def carry_over_selected_items() -> None:
+        ids = set(state.selected_item_ids) or ({state.selected_item_id} if state.selected_item_id else set())
+        if not ids:
+            return
+        carried = service.carry_over(ids, date.today())
+        if not carried:
+            ui.notify("繰越できるアイテムがありません(未完了で見積りが残っている当日のアイテムが対象です)", type="warning")
+            return
+        ui.notify(f"{len(carried)}件を繰り越しました")
+        # メインパネルでは繰り越したアイテムが表示日から外れるため、選択も解除する
+        if state.screen is Screen.MAIN:
+            state.select(None)
+            state.select_items(set())
+        refresh_all()
+
     def delete_selected_items() -> None:
         ids = set(state.selected_item_ids)
         if not ids:
@@ -320,6 +335,7 @@ def build_app_ui(
         shift_view_date=main_view.shift_view_date,
         toggle_done_selected_items=toggle_done_selected_items,
         skip_selected_items=skip_selected_items,
+        carry_over_selected_items=carry_over_selected_items,
         delete_selected_items=delete_selected_items,
         delete_selected_records=delete_selected_records,
         delete_selected_categories=delete_selected_categories,

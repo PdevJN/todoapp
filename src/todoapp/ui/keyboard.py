@@ -13,7 +13,7 @@ from todoapp.ui.app_state import AppState, Screen
 # キー操作を追加したら、ここにも追加すること(test_keyboard.pyが登録漏れを検出する)
 SHORTCUT_KEYS = [
     "Escape", "Enter", "Backspace", "Delete", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
-    "e", "c", "d", "S", "l", "L", "g", "T", "o", "u", "j", "k",
+    "e", "c", "d", "S", "r", "l", "L", "g", "T", "o", "u", "j", "k",
 ]  # fmt: skip
 
 
@@ -38,6 +38,7 @@ class KeyboardController:
         shift_view_date: Callable[[int], None],
         toggle_done_selected_items: Callable[[], None],
         skip_selected_items: Callable[[], None],
+        carry_over_selected_items: Callable[[], None],
         delete_selected_items: Callable[[], None],
         delete_selected_records: Callable[[], None],
         delete_selected_categories: Callable[[], None],
@@ -75,6 +76,7 @@ class KeyboardController:
         self._shift_view_date = shift_view_date
         self._toggle_done_selected_items = toggle_done_selected_items
         self._skip_selected_items = skip_selected_items
+        self._carry_over_selected_items = carry_over_selected_items
         self._delete_selected_items = delete_selected_items
         self._delete_selected_records = delete_selected_records
         self._delete_selected_categories = delete_selected_categories
@@ -171,6 +173,8 @@ class KeyboardController:
             self._toggle_done_selected_items()
         elif e.key == "S" and not self._is_dialog_open() and not self._state.is_read_only_view:
             self._skip_selected_items()
+        elif e.key == "r" and not self._is_dialog_open():
+            self._carry_over_selected_items()
         elif e.key == "c" and item_id is not None and not self._is_dialog_open() and not self._state.is_read_only_view:
             self._service.cancel_running(item_id)
             self._refresh_all()

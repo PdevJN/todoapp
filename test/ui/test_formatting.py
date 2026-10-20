@@ -1,6 +1,8 @@
 from datetime import date
 
+from todoapp.domain.models import ScheduleType, TodoItem
 from todoapp.ui.formatting import (
+    carried_badge_text,
     estimate_to_hours_minutes,
     format_duration,
     format_estimate,
@@ -165,3 +167,23 @@ def test_format_weekday_covers_monday_to_sunday() -> None:
     assert [format_weekday(date(2026, 10, 12 + i)) for i in range(7)] == [
         "(月)", "(火)", "(水)", "(木)", "(金)", "(土)", "(日)"
     ]
+
+
+def test_carried_badge_text_shows_original_date_for_one_time_items() -> None:
+    item = TodoItem(
+        name="資料作成", schedule_type=ScheduleType.ONE_TIME, anchor_date=date(2026, 10, 21),
+        carried_from=date(2026, 10, 20),
+    )  # fmt: skip
+
+    assert carried_badge_text(item) == "繰越 10/20〜"
+
+
+def test_carried_badge_text_is_none_when_not_carried_or_not_one_time() -> None:
+    plain = TodoItem(name="a", schedule_type=ScheduleType.ONE_TIME, anchor_date=date(2026, 10, 21))
+    changed = TodoItem(
+        name="b", schedule_type=ScheduleType.DAILY, anchor_date=date(2026, 10, 21),
+        carried_from=date(2026, 10, 20),
+    )  # fmt: skip
+
+    assert carried_badge_text(plain) is None
+    assert carried_badge_text(changed) is None

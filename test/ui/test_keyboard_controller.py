@@ -333,6 +333,26 @@ def test_shift_s_is_ignored_in_guarded_states(h: Harness, case: str) -> None:
     assert not h.called("skip_selected_items")
 
 
+def test_r_carries_over_selected_items(h: Harness) -> None:
+    h.press("r")
+
+    assert h.called("carry_over_selected_items")
+
+
+def test_r_works_in_read_only_view_because_past_items_are_carried_to_today(h: Harness) -> None:
+    h.state.view_date = date.today() - timedelta(days=1)
+    h.press("r")
+
+    assert h.called("carry_over_selected_items")
+
+
+def test_r_is_ignored_while_a_dialog_is_open(h: Harness) -> None:
+    h.set_true("is_dialog_open")
+    h.press("r")
+
+    assert not h.called("carry_over_selected_items")
+
+
 def test_c_cancels_running_of_selected_item(h: Harness) -> None:
     h.state.select("a")
     h.press("c")
