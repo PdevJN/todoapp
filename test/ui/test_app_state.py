@@ -125,3 +125,29 @@ def test_roll_over_follows_several_days_at_once() -> None:
     state.roll_over(date(2026, 10, 13))
 
     assert state.view_date == date(2026, 10, 13)
+
+
+def test_prune_selection_drops_ids_that_no_longer_exist() -> None:
+    state = AppState()
+    state.select("gone")
+    state.select_items({"gone", "kept"})
+    state.select_category("gone-c")
+    state.select_categories({"gone-c", "kept-c"})
+
+    state.prune_selection({"kept"}, {"kept-c"})
+
+    assert state.selected_item_id is None
+    assert state.selected_item_ids == {"kept"}
+    assert state.selected_category_id is None
+    assert state.selected_category_ids == {"kept-c"}
+
+
+def test_prune_selection_keeps_existing_ids() -> None:
+    state = AppState()
+    state.select("a")
+    state.select_category("c")
+
+    state.prune_selection({"a"}, {"c"})
+
+    assert state.selected_item_id == "a"
+    assert state.selected_category_id == "c"
