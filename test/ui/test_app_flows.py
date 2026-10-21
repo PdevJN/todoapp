@@ -281,6 +281,17 @@ async def test_enter_in_new_item_input_registers_one_time_item_for_today(app_use
     )
 
 
+async def test_item_registered_on_other_view_date_gets_that_date_as_anchor(app_user: User, app_env: AppEnv) -> None:
+    await app_user.open("/")
+    await press(app_user, "ArrowRight", shift=True)
+
+    app_user.find(content="新しいアイテム").type("明日やる").trigger("keydown.enter.exact")
+
+    await shows(app_user, "明日やる")  # 表示中の日に登録されるため、そのまま一覧に出る
+    [item] = app_env.todos().items
+    assert (item.name, item.anchor_date) == ("明日やる", TOMORROW)
+
+
 async def test_blank_input_does_not_register_an_item(app_user: User, app_env: AppEnv) -> None:
     await app_user.open("/")
 
