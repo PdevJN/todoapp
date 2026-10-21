@@ -340,6 +340,9 @@ def build_app_ui(
         is_dialog_open=lambda: any(dialog.is_open() for dialog in all_dialogs),
         is_log_open=log_view.is_open,
         is_category_list_open=category_list_dialog.is_open,
+        is_non_category_dialog_open=lambda: any(
+            dialog.is_open() for dialog in all_dialogs if dialog is not category_list_dialog
+        ),
         open_edit_dialog=edit_dialog.open_for,
         open_log_dialog=log_view.open,
         open_calendar_view=calendar_view.open,

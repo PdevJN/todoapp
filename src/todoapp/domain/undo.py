@@ -15,7 +15,6 @@ class Snapshot:
     items: list[TodoItem]
     categories: list[Category]
     link_templates: list[LinkTemplate]
-    record_names: dict[str, str]  # 記録id → アイテム名。名前変更で揃えた記録の名前を戻すために持つ
 
 
 class UndoHistory:

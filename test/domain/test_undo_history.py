@@ -1,8 +1,9 @@
+from todoapp.domain.models import Category
 from todoapp.domain.undo import MAX_HISTORY, Snapshot, UndoHistory
 
 
 def _snapshot(tag: str) -> Snapshot:
-    return Snapshot(items=[], categories=[], link_templates=[], record_names={"r": tag})
+    return Snapshot(items=[], categories=[Category(id=tag, name=tag, color="#000000")], link_templates=[])
 
 
 def test_undo_on_empty_history_returns_none() -> None:

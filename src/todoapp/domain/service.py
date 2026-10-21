@@ -127,7 +127,6 @@ class TodoService:
             items=copy.deepcopy(self._data.items),
             categories=copy.deepcopy(self._data.categories),
             link_templates=copy.deepcopy(self._data.link_templates),
-            record_names={record.id: record.item_name for record in self._data.records},
         )
 
     def _restore(self, snapshot: Snapshot) -> None:
@@ -135,15 +134,25 @@ class TodoService:
         self._data.items = copy.deepcopy(snapshot.items)
         self._data.categories = copy.deepcopy(snapshot.categories)
         self._data.link_templates = copy.deepcopy(snapshot.link_templates)
+        items_by_id = {item.id: item for item in self._data.items}
         for record in self._data.records:
-            name = snapshot.record_names.get(record.id)
-            if name is not None:
-                record.item_name = name
+            item = items_by_id.get(record.item_id)
+            if item is not None:
+                record.item_name = item.name  # 名前変更は既存の記録の名前も揃える仕様なので、復元後も揃え直す
         running = self.running_record()
-        if running is not None and all(item.id != running.item_id for item in self._data.items):
-            self.stop_running()  # 実行中のアイテムが無くなった場合は、削除時と同じく記録を残して停止する
-        else:
-            self._save()
+        if running is not None:
+            item = items_by_id.get(running.item_id)
+            today = self._clock().date()
+            # アイテムが無い、または完了・スキップ・未定になった場合は、削除・完了・スキップと同じく記録を残して停止する
+            if (
+                item is None
+                or is_done(item, today)
+                or is_skipped(item, today)
+                or item.schedule_type is ScheduleType.UNDECIDED
+            ):
+                self.stop_running()
+                return
+        self._save()
 
     def undo(self) -> str | None:
         """直前の編集操作を取り消し、その操作名を返す。履歴が空なら`None`。"""

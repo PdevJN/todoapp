@@ -21,7 +21,7 @@
 
 ### スナップショットと履歴(`domain/undo.py`、新規)
 
-- `Snapshot`: `items`・`categories`・`link_templates`のディープコピーと、`{記録id: アイテム名}`の対応表を持つ。`records`本体は持たない(Undoのたびに、その後の計測時間が消えるのを避けるため)
+- `Snapshot`: `items`・`categories`・`link_templates`のディープコピーを持つ。`records`本体は持たない(Undoのたびに、その後の計測時間が消えるのを避けるため)
 - `UndoHistory`: UndoスタックとRedoスタック(上限は各50件。超えたら古いものから捨てる)を持つ
   - `push(label, before)`: Undoスタックへ積み、Redoスタックを空にする
   - `pop_undo(current)`・`pop_redo(current)`: 反対側のスタックへ`current`を退避して、戻す先のスナップショットとラベルを返す。空なら`None`
@@ -39,8 +39,8 @@
   - `toggle_done`・`toggle_skipped`は`set_done`・`set_skipped`へ委譲するため、デコレータは付けない
 - 対象外: `start`・`stop_running`・`toggle_execution`・`cancel_running`・`edit_record`・`delete_record(s)`・`recover_interrupted`・`stop_on_shutdown`・`keep_alive`(日跨ぎの分割を含む)
 - `TodoService.undo() -> str | None`・`redo() -> str | None`: 復元した操作のラベルを返す。履歴が空なら`None`
-- 復元は`items`・`categories`・`link_templates`をスナップショットのコピーで置き換え、記録の名前は対応表にあるidの分だけ戻す(その後に削除された記録は無視する)。その後`_save()`を1回呼ぶ
-- 復元後に実行中の記録のアイテムが存在しない場合は、`delete_item`と同じく記録を停止する(記録は残す)。たとえば、追加したアイテムを実行した後に、追加を取り消した場合
+- 復元は`items`・`categories`・`link_templates`をスナップショットのコピーで置き換え、存在するアイテムの記録の名前をアイテム名に揃え直す(変更後に作られた記録も含む)。その後`_save()`を1回呼ぶ
+- 復元後に実行中の記録のアイテムが存在しない、または完了・スキップ・`未定`になった場合は、削除・完了・スキップと同じく記録を停止する(記録は残す)。たとえば、追加したアイテムを実行した後に追加を取り消した場合や、完了を解除して実行した後に解除を取り消した場合
 - 完了・スキップ・繰越で止めた計測は、Undoしても再開しない(停止した記録はそのまま残る)
 
 ## 画面(`ui/keyboard.py`・`main.py`・各ビュー)

@@ -219,3 +219,56 @@ def test_restored_items_are_independent_of_the_history() -> None:
 
     service.redo()  # Redoは、Undo時点の状態(散歩2)へ戻る
     assert service.items[0].name == "散歩2"
+
+
+def test_undo_stops_a_running_item_that_becomes_done() -> None:
+    service, _, clock = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, TODAY)
+    service.set_done([item.id], True, TODAY)
+    service.set_done([item.id], False, TODAY)
+    service.start(item.id)
+    clock.advance(30)
+
+    service.undo()  # 完了の解除を取り消す → 完了に戻る
+
+    assert service.running_record() is None
+    assert service.records[0].end_time is not None
+
+
+def test_undo_stops_a_running_item_that_becomes_skipped() -> None:
+    service, _, clock = _service()
+    item = service.add_item("散歩", ScheduleType.DAILY, TODAY)
+    service.set_skipped([item.id], True, TODAY)
+    service.set_skipped([item.id], False, TODAY)
+    service.start(item.id)
+    clock.advance(30)
+
+    service.undo()  # スキップの解除を取り消す → スキップに戻る
+
+    assert service.running_record() is None
+
+
+def test_undo_stops_a_running_item_that_becomes_undecided() -> None:
+    service, _, clock = _service()
+    item = service.add_item("散歩", ScheduleType.UNDECIDED, TODAY)
+    service.edit_item(item.id, schedule_type=ScheduleType.DAILY)
+    service.start(item.id)
+    clock.advance(30)
+
+    service.undo()  # 未定に戻る(未定は実行できない)
+
+    assert service.running_record() is None
+
+
+def test_undo_rename_also_renames_records_created_after_the_rename() -> None:
+    service, _, clock = _service()
+    item = service.add_item("旧名", ScheduleType.DAILY, TODAY)
+    service.edit_item(item.id, name="新名")
+    service.start(item.id)  # 名前変更の後に作られた記録
+    clock.advance(60)
+    service.stop_running()
+    assert [r.item_name for r in service.records] == ["新名"]
+
+    service.undo()
+
+    assert [r.item_name for r in service.records] == ["旧名"]
