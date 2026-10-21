@@ -142,7 +142,7 @@ class MainView:
         if error is not None:
             ui.notify(error, type="warning")
             return None
-        item = self._service.add_item(name, ScheduleType.ONE_TIME, date.today())
+        item = self._service.add_item(name, ScheduleType.ONE_TIME, self._state.view_date)
         self._new_item_input.value = ""
         self._state.select(item.id)
         self._refresh_all()
