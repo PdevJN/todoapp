@@ -681,3 +681,80 @@ async def test_settings_dialog_toggles_suspend_detection_and_saves_to_config(app
     click_displayed(app_user, "保存")
 
     assert json.loads(config_path.read_text(encoding="utf-8"))["suspend_detection"] is True
+
+
+# --- Undo/Redo ----------------------------------------------------------------------------
+
+
+async def test_ctrl_z_undoes_a_delete_and_shift_ctrl_z_redoes_it(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(items=[make_item("消す"), make_item("残す")])
+    await app_user.open("/")
+    click_row(app_user, "消す")
+    await press(app_user, "Delete")
+    assert _names(app_env) == ["残す"]
+
+    await press(app_user, "z", ctrl=True)
+
+    assert _names(app_env) == ["消す", "残す"]
+    await shows(app_user, "消す")
+    await app_user.should_see("元に戻しました: アイテムを削除")
+
+    await press(app_user, "Z", ctrl=True, shift=True)
+
+    assert _names(app_env) == ["残す"]
+    await hides(app_user, "消す")
+    await app_user.should_see("やり直しました: アイテムを削除")
+
+
+async def test_cmd_z_and_ctrl_y_work_as_undo_and_redo(app_user: User, app_env: AppEnv) -> None:
+    await app_user.open("/")
+    app_user.find(content="新しいアイテム").type("買い物").trigger("keydown.enter.exact")
+    assert _names(app_env) == ["買い物"]
+
+    await press(app_user, "z", meta=True)
+    assert _names(app_env) == []
+
+    await press(app_user, "y", ctrl=True)
+    assert _names(app_env) == ["買い物"]
+
+
+async def test_undo_and_redo_with_empty_history_show_warnings(app_user: User, app_env: AppEnv) -> None:
+    await app_user.open("/")
+
+    await press(app_user, "z", ctrl=True)
+    await app_user.should_see("元に戻す操作がありません")
+
+    await press(app_user, "Z", ctrl=True, shift=True)
+    await app_user.should_see("やり直す操作がありません")
+
+
+async def test_undo_is_ignored_while_a_dialog_is_open(app_user: User, app_env: AppEnv) -> None:
+    await app_user.open("/")
+    app_user.find(content="新しいアイテム").type("買い物").trigger("keydown.enter.exact")
+    await press(app_user, "e")  # 登録直後のアイテムが選択されているため、編集フォームが開く
+
+    await press(app_user, "z", ctrl=True)
+
+    assert _names(app_env) == ["買い物"]
+
+
+async def test_undo_works_while_the_category_list_is_open(app_user: User, app_env: AppEnv) -> None:
+    await app_user.open("/")
+    app_user.find(content="新しいアイテム").type("買い物").trigger("keydown.enter.exact")
+    await press(app_user, "g")  # カテゴリ一覧を開く
+
+    await press(app_user, "z", ctrl=True)
+
+    assert _names(app_env) == []
+
+
+async def test_undo_clears_selection_of_the_removed_item(app_user: User, app_env: AppEnv) -> None:
+    await app_user.open("/")
+    app_user.find(content="新しいアイテム").type("買い物").trigger("keydown.enter.exact")
+    await press(app_user, "z", ctrl=True)  # 追加を取り消す(取り消したアイテムが選択中だった)
+
+    await press(app_user, "e")  # 選択が残っていると、存在しないアイテムの編集でKeyErrorになる
+    await press(app_user, "Enter")
+
+    assert _names(app_env) == []
+    assert app_env.todos().records == []

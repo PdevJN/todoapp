@@ -42,6 +42,8 @@ class KeyboardController:
         delete_selected_items: Callable[[], None],
         delete_selected_records: Callable[[], None],
         delete_selected_categories: Callable[[], None],
+        undo: Callable[[], None],
+        redo: Callable[[], None],
         select_all_main_items: Callable[[], None],
         select_all_list_items: Callable[[], None],
         select_all_records: Callable[[], None],
@@ -80,6 +82,8 @@ class KeyboardController:
         self._delete_selected_items = delete_selected_items
         self._delete_selected_records = delete_selected_records
         self._delete_selected_categories = delete_selected_categories
+        self._undo = undo
+        self._redo = redo
         self._select_all_main_items = select_all_main_items
         self._select_all_list_items = select_all_list_items
         self._select_all_records = select_all_records
@@ -206,3 +210,12 @@ class KeyboardController:
                 self._select_all_list_items()
             else:
                 self._select_all_main_items()
+        elif (e.key == "KeyZ" or e.key == "KeyY") and (e.modifiers.meta or e.modifiers.ctrl):
+            # ダイアログ表示中は無効(ただしカテゴリ一覧はカテゴリの編集を戻せるよう有効にする)
+            if self._is_dialog_open() and not self._is_category_list_open():
+                return
+            # Cmd/Ctrl+Zがundo、Shift付きとCtrl+Yがredo。Shiftを押すとkeyは"Z"になるが、codeは"KeyZ"のまま
+            if e.key == "KeyY" or e.modifiers.shift:
+                self._redo()
+            else:
+                self._undo()
