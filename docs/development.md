@@ -16,6 +16,7 @@ src/todoapp/
 ├── domain/        # NiceGUIに依存しないドメインロジック
 │   ├── models.py            # TodoItem(完了日done_dateを含む)・Category・LinkTemplate・ItemLink(URL組み立てresolve_link_url()・検証)・ExecutionRecord・is_done()/DoneFilter等
 │   ├── service.py           # TodoService(実行・完了・集計・GAP等のユースケース)
+│   ├── undo.py              # Undo/Redoの履歴(Snapshot・UndoHistory。編集系の操作を50件まで)
 │   └── record_layout.py     # 作業ログの時間編集の吸着ロジック(1分単位・隣接記録の境界へ密着)の純粋関数
 ├── repository/     # JSON永続化(json_repository.py: todos.json / config_repository.py: config.json / holiday_repository.py: holidays.json・祝日CSV取得 / alive_repository.py: alive.json・実行中の生存時刻)
 ├── ui/              # NiceGUI画面
