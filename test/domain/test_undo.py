@@ -272,3 +272,44 @@ def test_undo_rename_also_renames_records_created_after_the_rename() -> None:
     service.undo()
 
     assert [r.item_name for r in service.records] == ["旧名"]
+
+
+def test_undo_group_records_several_operations_as_one() -> None:
+    service, _, _ = _service()
+    item = service.add_item("a", ScheduleType.ONE_TIME, TODAY)
+    category = service.add_category("仕事")
+
+    with service.undo_group("アイテムを編集"):
+        service.edit_item(item.id, name="b")
+        service.set_item_category(item.id, category.id)
+
+    assert service.undo() == "アイテムを編集"
+    assert service.items[0].name == "a"
+    assert service.items[0].category_id is None
+    assert service.undo() == "カテゴリを追加"
+
+
+def test_undo_group_without_changes_is_not_recorded() -> None:
+    service, _, _ = _service()
+    item = service.add_item("a", ScheduleType.ONE_TIME, TODAY)
+
+    with service.undo_group("アイテムを編集"):
+        service.edit_item(item.id, name="a")
+
+    assert service.undo() == "アイテムを追加"
+
+
+def test_undo_group_that_raises_is_not_recorded_and_resets_nesting() -> None:
+    service, _, _ = _service()
+    item = service.add_item("a", ScheduleType.ONE_TIME, TODAY)
+
+    try:
+        with service.undo_group("アイテムを編集"):
+            service.edit_item(item.id, name="b")
+            raise RuntimeError
+    except RuntimeError:
+        pass
+    service.edit_item(item.id, name="c")  # 入れ子の深さが戻っていれば、通常どおり積まれる
+
+    assert service.undo() == "アイテムを編集"
+    assert service.items[0].name == "b"  # 例外前の変更は残る(例外で巻き戻しはしない)

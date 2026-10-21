@@ -758,3 +758,42 @@ async def test_undo_clears_selection_of_the_removed_item(app_user: User, app_env
 
     assert _names(app_env) == []
     assert app_env.todos().records == []
+
+
+async def test_one_edit_form_save_is_undone_with_a_single_undo(app_user: User, app_env: AppEnv) -> None:
+    category = Category(name="仕事")
+    app_env.seed(items=[make_item("元の名前")], categories=[category])
+    await app_user.open("/")
+    click_row(app_user, "元の名前")
+    await press(app_user, "e")
+    await shows(app_user, "アイテムの編集")
+    [name_input] = [e for e in app_user.find(kind=ui.textarea).elements if e.props.get("label") == "アイテム名"]
+    [category_select] = [e for e in app_user.find(kind=ui.select).elements if e.props.get("label") == "カテゴリ"]
+    name_input.value = "新しい名前"
+    category_select.value = category.id
+    click_displayed(app_user, "保存")
+    [item] = app_env.todos().items
+    assert (item.name, item.category_id) == ("新しい名前", category.id)
+
+    await press(app_user, "z", ctrl=True)  # 名前とカテゴリの変更がまとめて戻る
+
+    [item] = app_env.todos().items
+    assert (item.name, item.category_id) == ("元の名前", None)
+
+
+async def test_deleting_in_edit_list_clears_the_row_selection(app_user: User, app_env: AppEnv) -> None:
+    keep, gone = make_item("残す"), make_item("消す")
+    app_env.seed(items=[keep, gone])
+    await app_user.open("/")
+    await press(app_user, "Escape")
+    await shows(app_user, "編集一覧")
+    [table] = [t for t in app_user.find(ui.table).elements if any(c["name"] == "anchor" for c in t.columns)]
+    UserInteraction(app_user, {table}, None).trigger("rowClick", [[], {"id": gone.id}])
+    assert table.selected == [{"id": gone.id}]
+
+    await press(app_user, "Delete")
+    assert table.selected == []
+
+    await press(app_user, "z", ctrl=True)  # 削除を取り消しても、戻った行にチェックは付かない
+    assert _names(app_env) == ["残す", "消す"]
+    assert table.selected == []

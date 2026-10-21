@@ -172,21 +172,23 @@ class EditDialog(DialogMixin):
             if schedule_type.value not in _NO_ANCHOR_SCHEDULES
             else date.today()
         )
-        self._service.edit_item(
-            self._item_id,
-            name=name,
-            schedule_type=schedule_type,
-            anchor_date=anchor_date,
-            estimate_hours=hours_minutes_to_estimate(
-                float(self._estimate_hours_input.value or 0), float(self._estimate_minutes_input.value or 0)
-            ),
-            today_estimate_hours=hours_minutes_to_estimate(
-                float(self._today_estimate_hours_input.value or 0),
-                float(self._today_estimate_minutes_input.value or 0),
-            ),
-        )
-        self._service.set_item_category(self._item_id, self._category_select.value)
-        self._service.set_item_links(self._item_id, links)
+        # 1回の保存は、Undoでも1件として戻せるようにまとめる
+        with self._service.undo_group("アイテムを編集"):
+            self._service.edit_item(
+                self._item_id,
+                name=name,
+                schedule_type=schedule_type,
+                anchor_date=anchor_date,
+                estimate_hours=hours_minutes_to_estimate(
+                    float(self._estimate_hours_input.value or 0), float(self._estimate_minutes_input.value or 0)
+                ),
+                today_estimate_hours=hours_minutes_to_estimate(
+                    float(self._today_estimate_hours_input.value or 0),
+                    float(self._today_estimate_minutes_input.value or 0),
+                ),
+            )
+            self._service.set_item_category(self._item_id, self._category_select.value)
+            self._service.set_item_links(self._item_id, links)
         self.dialog.close()
         self._refresh_all()
 
