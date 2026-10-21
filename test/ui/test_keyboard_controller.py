@@ -14,11 +14,20 @@ from nicegui.events import KeyboardAction, KeyboardKey, KeyboardModifiers, KeyEv
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.keyboard import KeyboardController
 
-_CODES = {"ArrowUp": "ArrowUp", "ArrowDown": "ArrowDown", "ArrowLeft": "ArrowLeft", "ArrowRight": "ArrowRight"}
+_CODES = {
+    "ArrowUp": "ArrowUp",
+    "ArrowDown": "ArrowDown",
+    "ArrowLeft": "ArrowLeft",
+    "ArrowRight": "ArrowRight",
+    "z": "KeyZ",
+    "Z": "KeyZ",
+    "y": "KeyY",
+}
 
 # 引数が無い状態問い合わせ(is_*/has_*)は既定でFalseを返す
 _PREDICATES = {
     "is_dialog_open",
+    "is_non_category_dialog_open",
     "is_log_open",
     "is_category_list_open",
     "is_main_select_all_active",
@@ -473,3 +482,47 @@ def test_u_is_ignored_on_list_screen_or_with_dialog_open(h: Harness) -> None:
     h.set_true("is_dialog_open")
     h.press("u")
     assert not h.called("open_link_templates")
+
+
+# --- Undo/Redo ----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("key", "modifiers", "target"),
+    [
+        ("z", {"ctrl": True}, "undo"),
+        ("z", {"meta": True}, "undo"),
+        ("Z", {"ctrl": True, "shift": True}, "redo"),
+        ("Z", {"meta": True, "shift": True}, "redo"),
+        ("y", {"ctrl": True}, "redo"),
+    ],
+)
+def test_undo_redo_keys_are_routed(h: Harness, key: str, modifiers: dict[str, bool], target: str) -> None:
+    h.press(key, **modifiers)
+
+    assert h.called(target)
+    assert not h.called("redo" if target == "undo" else "undo")
+
+
+def test_undo_key_needs_a_modifier(h: Harness) -> None:
+    h.press("z")
+
+    assert not h.called("undo")
+
+
+def test_undo_is_ignored_while_a_dialog_other_than_the_category_list_is_open(h: Harness) -> None:
+    h.set_true("is_dialog_open", "is_non_category_dialog_open")
+
+    h.press("z", ctrl=True)
+    h.press("y", ctrl=True)
+
+    assert not h.called("undo")
+    assert not h.called("redo")
+
+
+def test_undo_works_when_only_the_category_list_is_open(h: Harness) -> None:
+    h.set_true("is_dialog_open", "is_category_list_open")
+
+    h.press("z", ctrl=True)
+
+    assert h.called("undo")

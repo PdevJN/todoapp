@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import date, datetime
 
 import httpx
@@ -134,6 +135,7 @@ def build_app_ui(
         "if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); return; }"
         "const ignoreTags = ['input', 'select', 'button', 'textarea'];"
         "const focusedTag = document.activeElement && document.activeElement.tagName.toLowerCase();"
+        "if (!ignoreTags.includes(focusedTag) && (e.metaKey || e.ctrlKey) && ['z', 'y'].includes(e.key.toLowerCase())) { e.preventDefault(); return; }"
         "if (ignoreTags.includes(focusedTag) || e.metaKey || e.ctrlKey || e.altKey) return;"
         f"const shortcutKeys = {json.dumps(SHORTCUT_KEYS)};"
         "if (shortcutKeys.includes(e.key)) e.preventDefault();"
@@ -317,12 +319,30 @@ def build_app_ui(
         link_template_dialog,
     ]
 
+    def apply_history(action: Callable[[], str | None], done_message: str, empty_message: str) -> None:
+        label = action()
+        if label is None:
+            ui.notify(empty_message, type="warning")
+            return
+        state.prune_selection({item.id for item in service.items}, {category.id for category in service.categories})
+        refresh_all()
+        ui.notify(f"{done_message}: {label}")
+
+    def undo_last_change() -> None:
+        apply_history(service.undo, "元に戻しました", "元に戻す操作がありません")
+
+    def redo_last_change() -> None:
+        apply_history(service.redo, "やり直しました", "やり直す操作がありません")
+
     keyboard = KeyboardController(
         service,
         state,
         is_dialog_open=lambda: any(dialog.is_open() for dialog in all_dialogs),
         is_log_open=log_view.is_open,
         is_category_list_open=category_list_dialog.is_open,
+        is_non_category_dialog_open=lambda: any(
+            dialog.is_open() for dialog in all_dialogs if dialog is not category_list_dialog
+        ),
         open_edit_dialog=edit_dialog.open_for,
         open_log_dialog=log_view.open,
         open_calendar_view=calendar_view.open,
@@ -339,6 +359,8 @@ def build_app_ui(
         delete_selected_items=delete_selected_items,
         delete_selected_records=delete_selected_records,
         delete_selected_categories=delete_selected_categories,
+        undo=undo_last_change,
+        redo=redo_last_change,
         select_all_main_items=main_view.select_all,
         select_all_list_items=list_view.select_all,
         select_all_records=log_view.select_all,

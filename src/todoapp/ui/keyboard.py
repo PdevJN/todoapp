@@ -26,6 +26,7 @@ class KeyboardController:
         is_dialog_open: Callable[[], bool],
         is_log_open: Callable[[], bool],
         is_category_list_open: Callable[[], bool],
+        is_non_category_dialog_open: Callable[[], bool],
         open_edit_dialog: Callable[[str], None],
         open_log_dialog: Callable[[], None],
         open_calendar_view: Callable[[], None],
@@ -42,6 +43,8 @@ class KeyboardController:
         delete_selected_items: Callable[[], None],
         delete_selected_records: Callable[[], None],
         delete_selected_categories: Callable[[], None],
+        undo: Callable[[], None],
+        redo: Callable[[], None],
         select_all_main_items: Callable[[], None],
         select_all_list_items: Callable[[], None],
         select_all_records: Callable[[], None],
@@ -64,6 +67,7 @@ class KeyboardController:
         self._is_dialog_open = is_dialog_open
         self._is_log_open = is_log_open
         self._is_category_list_open = is_category_list_open
+        self._is_non_category_dialog_open = is_non_category_dialog_open
         self._open_edit_dialog = open_edit_dialog
         self._open_log_dialog = open_log_dialog
         self._open_calendar_view = open_calendar_view
@@ -80,6 +84,8 @@ class KeyboardController:
         self._delete_selected_items = delete_selected_items
         self._delete_selected_records = delete_selected_records
         self._delete_selected_categories = delete_selected_categories
+        self._undo = undo
+        self._redo = redo
         self._select_all_main_items = select_all_main_items
         self._select_all_list_items = select_all_list_items
         self._select_all_records = select_all_records
@@ -206,3 +212,13 @@ class KeyboardController:
                 self._select_all_list_items()
             else:
                 self._select_all_main_items()
+        elif (e.key == "KeyZ" or e.key == "KeyY") and (e.modifiers.meta or e.modifiers.ctrl):
+            # ダイアログ表示中は無効。ただしカテゴリ一覧だけが開いている間は、カテゴリの編集を戻せるよう有効にする
+            # (その上に編集・種別入力・確認のダイアログが重なっている間は、開いたままのフォームと食い違うため無効)
+            if self._is_non_category_dialog_open():
+                return
+            # Cmd/Ctrl+Zがundo、Shift付きとCtrl+Yがredo。Shiftを押すとkeyは"Z"になるが、codeは"KeyZ"のまま
+            if e.key == "KeyY" or e.modifiers.shift:
+                self._redo()
+            else:
+                self._undo()

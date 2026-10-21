@@ -60,5 +60,14 @@ class AppState:
     def select_categories(self, category_ids: set[str]) -> None:
         self.selected_category_ids = category_ids
 
+    def prune_selection(self, item_ids: set[str], category_ids: set[str]) -> None:
+        """Undo/Redoで無くなったアイテム・カテゴリを、選択から外す。"""
+        if self.selected_item_id not in item_ids:
+            self.selected_item_id = None
+        self.selected_item_ids &= item_ids
+        if self.selected_category_id not in category_ids:
+            self.selected_category_id = None
+        self.selected_category_ids &= category_ids
+
     def toggle_screen(self) -> None:
         self.screen = Screen.LIST if self.screen is Screen.MAIN else Screen.MAIN

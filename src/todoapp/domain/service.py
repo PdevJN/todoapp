@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
+import functools
 from collections.abc import Callable, Iterable
 from datetime import date, datetime, time, timedelta
-from typing import NamedTuple, Protocol
+from typing import Concatenate, NamedTuple, Protocol
 
 from todoapp.domain.models import (
     REPEATING_SCHEDULES,
@@ -24,6 +26,35 @@ from todoapp.domain.models import (
     resolve_link_url,
     today_estimate_seconds,
 )
+from todoapp.domain.undo import Snapshot, UndoHistory
+
+
+def undoable[**P, R](
+    label: str,
+) -> Callable[[Callable[Concatenate[TodoService, P], R]], Callable[Concatenate[TodoService, P], R]]:
+    """編集系のメソッドをUndoの対象にする。呼び出しの前後で状態が変わった場合だけ、履歴へ積む。
+
+    メソッド同士が呼び合う場合(例: `delete_category`→`delete_categories`)は、一番外側の呼び出しだけを1操作として扱う。
+    """
+
+    def decorator(method: Callable[Concatenate[TodoService, P], R]) -> Callable[Concatenate[TodoService, P], R]:
+        @functools.wraps(method)
+        def wrapper(self: TodoService, /, *args: P.args, **kwargs: P.kwargs) -> R:
+            if self._undo_depth > 0:
+                return method(self, *args, **kwargs)
+            before = self._snapshot()
+            self._undo_depth += 1
+            try:
+                result = method(self, *args, **kwargs)
+            finally:
+                self._undo_depth -= 1
+            if self._snapshot() != before:
+                self._history.push(label, before)
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 class TodoRepository(Protocol):
@@ -69,6 +100,8 @@ class TodoService:
         self._last_tick: datetime | None = None
         self._alive_saved_at: datetime | None = None
         self._data = repository.load()
+        self._history = UndoHistory()
+        self._undo_depth = 0
 
     @property
     def items(self) -> list[TodoItem]:
@@ -88,6 +121,56 @@ class TodoService:
 
     def _save(self) -> None:
         self._repository.save(self._data)
+
+    def _snapshot(self) -> Snapshot:
+        return Snapshot(
+            items=copy.deepcopy(self._data.items),
+            categories=copy.deepcopy(self._data.categories),
+            link_templates=copy.deepcopy(self._data.link_templates),
+        )
+
+    def _restore(self, snapshot: Snapshot) -> None:
+        # 履歴側のスナップショットを後から書き換えないよう、コピーを戻す
+        self._data.items = copy.deepcopy(snapshot.items)
+        self._data.categories = copy.deepcopy(snapshot.categories)
+        self._data.link_templates = copy.deepcopy(snapshot.link_templates)
+        items_by_id = {item.id: item for item in self._data.items}
+        for record in self._data.records:
+            item = items_by_id.get(record.item_id)
+            if item is not None:
+                record.item_name = item.name  # 名前変更は既存の記録の名前も揃える仕様なので、復元後も揃え直す
+        running = self.running_record()
+        if running is not None:
+            item = items_by_id.get(running.item_id)
+            today = self._clock().date()
+            # アイテムが無い、または完了・スキップ・未定になった場合は、削除・完了・スキップと同じく記録を残して停止する
+            if (
+                item is None
+                or is_done(item, today)
+                or is_skipped(item, today)
+                or item.schedule_type is ScheduleType.UNDECIDED
+            ):
+                self.stop_running()
+                return
+        self._save()
+
+    def undo(self) -> str | None:
+        """直前の編集操作を取り消し、その操作名を返す。履歴が空なら`None`。"""
+        entry = self._history.undo(self._snapshot())
+        if entry is None:
+            return None
+        label, snapshot = entry
+        self._restore(snapshot)
+        return label
+
+    def redo(self) -> str | None:
+        """取り消した操作をやり直し、その操作名を返す。やり直す操作が無ければ`None`。"""
+        entry = self._history.redo(self._snapshot())
+        if entry is None:
+            return None
+        label, snapshot = entry
+        self._restore(snapshot)
+        return label
 
     def _find_item(self, item_id: str) -> TodoItem:
         for item in self._data.items:
@@ -113,6 +196,7 @@ class TodoService:
                 return template
         raise KeyError(template_id)
 
+    @undoable("アイテムを追加")
     def add_item(
         self,
         name: str,
@@ -130,6 +214,7 @@ class TodoService:
         self._save()
         return item
 
+    @undoable("アイテムを編集")
     def edit_item(
         self,
         item_id: str,
@@ -259,6 +344,7 @@ class TodoService:
             self._data.records.remove(record)
             self._save()
 
+    @undoable("アイテムを削除")
     def delete_item(self, item_id: str) -> None:
         running = self.running_record()
         if running is not None and running.item_id == item_id:
@@ -266,6 +352,7 @@ class TodoService:
         self._data.items = [item for item in self._data.items if item.id != item_id]
         self._save()
 
+    @undoable("アイテムを削除")
     def delete_items(self, item_ids: Iterable[str]) -> None:
         ids = set(item_ids)
         running = self.running_record()
@@ -274,11 +361,13 @@ class TodoService:
         self._data.items = [item for item in self._data.items if item.id not in ids]
         self._save()
 
+    @undoable("アイテムの並び替え")
     def reorder(self, old_index: int, new_index: int) -> None:
         item = self._data.items.pop(old_index)
         self._data.items.insert(new_index, item)
         self._save()
 
+    @undoable("アイテムの並び替え")
     def move_item_to(self, item_id: str, target_id: str) -> None:
         """アイテムを、対象アイテムのいま居る位置へ移動する(表示を絞っていても全体の並びを正しく更新するため)。"""
         item = self._find_item(item_id)
@@ -301,6 +390,7 @@ class TodoService:
         # dict.fromkeysは最初に現れた順を保って重複を除く。空の名前は候補にしない
         return [name for name in dict.fromkeys(names) if name]
 
+    @undoable("完了の切り替え")
     def set_done(self, item_ids: Iterable[str], done: bool, today: date) -> None:
         ids = set(item_ids)
         for item in self._data.items:
@@ -321,6 +411,7 @@ class TodoService:
         all_done = bool(items) and all(is_done(item, today) for item in items)
         self.set_done(ids, not all_done, today)
 
+    @undoable("スキップの切り替え")
     def set_skipped(self, item_ids: Iterable[str], skipped: bool, today: date) -> None:
         """繰り返し(毎日・週次・月次)のアイテムを、その日だけスキップ(または解除)する。実行中なら停止する。"""
         ids = set(item_ids)
@@ -345,6 +436,7 @@ class TodoService:
         self.set_skipped({item.id for item in items}, not all_skipped, today)
         return True
 
+    @undoable("繰越")
     def carry_over(self, item_ids: Iterable[str], today: date) -> list[str]:
         """未完了で見積りが残っている当日のアイテムを次の日へ繰り越し、繰り越したidを返す(対象外は変更しない)。
 
@@ -435,12 +527,14 @@ class TodoService:
             return True
         return any(c.name == name and c.id != exclude_id for c in self._data.categories)
 
+    @undoable("カテゴリを追加")
     def add_category(self, name: str, kind: str = "", expiry_date: date | None = None) -> Category:
         category = Category(name=name, kind=kind, expiry_date=expiry_date)
         self._data.categories.append(category)
         self._save()
         return category
 
+    @undoable("カテゴリの並び替え")
     def move_category_to(self, category_id: str, target_id: str) -> None:
         """カテゴリを、対象カテゴリのいま居る位置へ移動する(`move_item_to`と同じ考え方)。"""
         category = self._find_category(category_id)
@@ -450,6 +544,7 @@ class TodoService:
         self._data.categories.insert(target_index, category)
         self._save()
 
+    @undoable("カテゴリを編集")
     def edit_category(
         self, category_id: str, *, name: str, kind: str, expiry_date: date | None, color: str, prj_code: str
     ) -> None:
@@ -468,6 +563,7 @@ class TodoService:
         ids = set(category_ids)
         return sum(1 for item in self._data.items if item.category_id in ids)
 
+    @undoable("カテゴリを削除")
     def delete_categories(self, category_ids: Iterable[str]) -> None:
         ids = set(category_ids)
         self._data.categories = [c for c in self._data.categories if c.id not in ids]
@@ -476,17 +572,20 @@ class TodoService:
                 item.category_id = None
         self._save()
 
+    @undoable("カテゴリの設定")
     def set_item_category(self, item_id: str, category_id: str | None) -> None:
         item = self._find_item(item_id)
         item.category_id = category_id
         self._save()
 
+    @undoable("リンクテンプレートを追加")
     def add_link_template(self, name: str, url_template: str) -> LinkTemplate:
         template = LinkTemplate(name=name, url_template=url_template)
         self._data.link_templates.append(template)
         self._save()
         return template
 
+    @undoable("リンクテンプレートを編集")
     def edit_link_template(self, template_id: str, *, name: str, url_template: str) -> None:
         template = self._find_link_template(template_id)
         template.name = name
@@ -497,6 +596,7 @@ class TodoService:
         ids = set(template_ids)
         return sum(1 for item in self._data.items for link in item.links if link.template_id in ids)
 
+    @undoable("リンクテンプレートを削除")
     def delete_link_templates(self, template_ids: Iterable[str]) -> None:
         """テンプレートを削除する。それを使うリンクも、値だけでは開けないためアイテムから削除する。"""
         ids = set(template_ids)
@@ -505,6 +605,7 @@ class TodoService:
             item.links = [link for link in item.links if link.template_id not in ids]
         self._save()
 
+    @undoable("リンクの設定")
     def set_item_links(self, item_id: str, links: list[ItemLink]) -> None:
         self._find_item(item_id).links = links
         self._save()
