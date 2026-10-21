@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import copy
 import functools
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from typing import Concatenate, NamedTuple, Protocol
 
@@ -40,17 +41,8 @@ def undoable[**P, R](
     def decorator(method: Callable[Concatenate[TodoService, P], R]) -> Callable[Concatenate[TodoService, P], R]:
         @functools.wraps(method)
         def wrapper(self: TodoService, /, *args: P.args, **kwargs: P.kwargs) -> R:
-            if self._undo_depth > 0:
+            with self.undo_group(label):
                 return method(self, *args, **kwargs)
-            before = self._snapshot()
-            self._undo_depth += 1
-            try:
-                result = method(self, *args, **kwargs)
-            finally:
-                self._undo_depth -= 1
-            if self._snapshot() != before:
-                self._history.push(label, before)
-            return result
 
         return wrapper
 
@@ -153,6 +145,21 @@ class TodoService:
                 self.stop_running()
                 return
         self._save()
+
+    @contextmanager
+    def undo_group(self, label: str) -> Iterator[None]:
+        """ブロック内の編集操作を、Undoの1件にまとめる(入れ子の場合は一番外側だけ)。状態が変わらなければ積まない。"""
+        if self._undo_depth > 0:
+            yield
+            return
+        before = self._snapshot()
+        self._undo_depth += 1
+        try:
+            yield
+        finally:
+            self._undo_depth -= 1
+        if self._snapshot() != before:
+            self._history.push(label, before)
 
     def undo(self) -> str | None:
         """直前の編集操作を取り消し、その操作名を返す。履歴が空なら`None`。"""

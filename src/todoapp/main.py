@@ -197,7 +197,10 @@ def build_app_ui(
 
         def do_delete() -> None:
             service.delete_items(ids)
+            # 削除したアイテムの選択が残ると、Undoで戻したときに編集一覧の行だけチェック済みになる
+            state.select(None)
             state.select_items(set())
+            list_view.clear_selection()
             refresh_all()
 
         if len(ids) >= 2:
