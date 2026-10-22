@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from nicegui import ui
 from nicegui.events import GenericEventArguments, ValueChangeEventArguments
@@ -10,7 +10,7 @@ from todoapp.domain.models import Category, ExecutionRecord
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
 from todoapp.ui.dialog_base import DialogMixin
-from todoapp.ui.formatting import DONE_TEXT_CLASSES, format_duration, format_hhmm
+from todoapp.ui.formatting import DONE_TEXT_CLASSES, format_duration, format_hhmm, format_weekday
 from todoapp.ui.js_handlers import CLIPBOARD_COPY_HANDLER
 
 _MODE_ORDER = "order"
@@ -31,16 +31,29 @@ class LogView(DialogMixin):
         self._rendered_record_ids: list[str] = []
         self._select_anchor_index: int | None = None
         self._mode = _MODE_ORDER
+        self._view_date = date.today()
         self._category_signature: list[tuple[str | None, list[tuple[str, bool]]]] = []
         self._category_time_labels: list[tuple[ui.label, list[ui.label]]] = []
 
     def build(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[32rem] gap-2"):
             with ui.row().classes("w-full items-center justify-between"):
-                ui.label("本日の作業ログ").classes("text-lg font-bold")
+                ui.label("作業ログ").classes("text-lg font-bold")
                 self.mode_toggle = ui.toggle(
                     _MODE_LABELS, value=self._mode, on_change=self._on_mode_change
                 ).props("dense")
+            # 表示する日を前後の日・日付入力で切り替える(開くたびに当日から始まり、保存しない)
+            with ui.row().classes("items-center gap-1"):
+                ui.button(icon="chevron_left", on_click=lambda: self.shift_view_date(-1)).props(
+                    "flat dense round"
+                ).mark("log-prev-day")
+                self._date_input = ui.input(
+                    value=self._view_date.isoformat(), on_change=self._on_view_date_change
+                ).props("type=date dense")
+                self._weekday_label = ui.label(format_weekday(self._view_date))
+                ui.button(icon="chevron_right", on_click=lambda: self.shift_view_date(1)).props(
+                    "flat dense round"
+                ).mark("log-next-day")
             self.log_container = ui.column().classes("w-full gap-1")
             with ui.row().classes("w-full justify-end gap-2"):
                 self.copy_button = ui.button("経過時間をコピー", icon="content_copy").props("flat")
@@ -52,6 +65,9 @@ class LogView(DialogMixin):
     def open(self) -> None:
         self._mode = _MODE_ORDER
         self.mode_toggle.set_value(_MODE_ORDER)
+        self._view_date = date.today()
+        self._date_input.set_value(self._view_date.isoformat())
+        self._weekday_label.set_text(format_weekday(self._view_date))
         self._render()
         self.dialog.open()
 
@@ -60,7 +76,12 @@ class LogView(DialogMixin):
 
     def _tick(self) -> None:
         # 行を作り直すと表示中のツールチップが消えるため、構成が同じなら時間の文字だけ更新する
-        if not self.is_open() or self._mode != _MODE_CATEGORY or self._service.running_record() is None:
+        if (
+            not self.is_open()
+            or self._mode != _MODE_CATEGORY
+            or self._view_date != date.today()
+            or self._service.running_record() is None
+        ):
             return
         rows = self._category_rows()
         if _signature(rows) != self._category_signature:
@@ -73,11 +94,11 @@ class LogView(DialogMixin):
                 item_label.set_text(format_duration(item_seconds))
 
     def _category_rows(self) -> list[_CategoryRow]:
-        today = date.today()
-        items_by_category = self._service.category_today_item_totals(today)
+        day = self._view_date
+        items_by_category = self._service.category_today_item_totals(day)
         return [
             (category, seconds, items_by_category.get(category.id if category else None, []))
-            for category, seconds in self._service.category_today_all_totals(today)
+            for category, seconds in self._service.category_today_all_totals(day)
         ]
 
     def _update_copy_text(self, rows: list[_CategoryRow]) -> None:
@@ -90,6 +111,20 @@ class LogView(DialogMixin):
             ui.notify("経過時間をコピーしました", type="positive")
         else:
             ui.notify("クリップボードへのコピーに失敗しました", type="negative")
+
+    def shift_view_date(self, days: int) -> None:
+        self._date_input.value = (self._view_date + timedelta(days=days)).isoformat()
+
+    def _on_view_date_change(self, e: ValueChangeEventArguments[str | None]) -> None:
+        if not e.value:
+            return
+        self._view_date = date.fromisoformat(e.value)
+        self._weekday_label.set_text(format_weekday(self._view_date))
+        # 表示が切り替わると見えなくなる記録が選択されたままにならないよう、選択を解除する
+        self._state.select_records(set())
+        self._state.select_record(None)
+        self._select_anchor_index = None
+        self._render.refresh()
 
     def _on_mode_change(self, e: ValueChangeEventArguments[str]) -> None:
         # カテゴリ別表示では記録を選択できないため、切り替え時に記録の選択を解除する
@@ -156,10 +191,11 @@ class LogView(DialogMixin):
                 self._category_time_labels = [self._render_category_row(*row) for row in rows]
                 self._update_copy_text(rows)
                 return
-            records = self._service.today_records(date.today())
+            records = self._service.today_records(self._view_date)
             self._rendered_record_ids = [record.id for record in records]
             if not records:
-                ui.label("本日の記録はまだありません").classes("text-gray-400 italic")
+                is_today = self._view_date == date.today()
+                ui.label("本日の記録はまだありません" if is_today else "この日の記録はありません").classes("text-gray-400 italic")
                 return
             for record in records:
                 self._render_row(record)
@@ -221,7 +257,7 @@ class LogView(DialogMixin):
                     # 省略された名前の全文を、ツールチップの先頭に表示する
                     ui.label(category.name).classes("font-bold")
                 if not items:
-                    ui.label("本日のタスクはありません")
+                    ui.label("本日のタスクはありません" if self._view_date == date.today() else "この日のタスクはありません")
                 for name, item_seconds, done in items:
                     # 完了したアイテムは、他の画面と同じく取り消し線とグレーで表示する
                     done_classes = f" {DONE_TEXT_CLASSES}" if done else ""

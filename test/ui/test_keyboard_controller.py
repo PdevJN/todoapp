@@ -231,6 +231,31 @@ def test_shift_arrow_is_ignored_on_list_with_dialog_or_without_shift(
     assert not h.called("shift_view_date")
 
 
+# --- ←/→(作業ログの表示日の移動) -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(("key", "delta"), [("ArrowRight", 1), ("ArrowLeft", -1)])
+def test_arrow_moves_log_date_while_log_is_open(h: Harness, key: str, delta: int) -> None:
+    h.set_true("is_log_open", "is_dialog_open")
+    h.press(key)
+
+    h.cb["shift_log_date"].assert_called_once_with(delta)
+    assert not h.called("shift_view_date")
+
+
+def test_arrow_does_not_move_log_date_when_log_is_closed(h: Harness) -> None:
+    h.press("ArrowRight")
+
+    assert not h.called("shift_log_date")
+
+
+def test_shift_arrow_does_not_move_log_date_while_log_is_open(h: Harness) -> None:
+    h.set_true("is_log_open", "is_dialog_open")
+    h.press("ArrowRight", shift=True)
+
+    assert not h.called("shift_log_date")
+
+
 # --- Enter(実行・停止) ------------------------------------------------------------------
 
 

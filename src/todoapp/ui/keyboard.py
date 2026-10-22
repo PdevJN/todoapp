@@ -37,6 +37,7 @@ class KeyboardController:
         open_settings: Callable[[], None],
         open_link_templates: Callable[[], None],
         shift_view_date: Callable[[int], None],
+        shift_log_date: Callable[[int], None],
         toggle_done_selected_items: Callable[[], None],
         skip_selected_items: Callable[[], None],
         carry_over_selected_items: Callable[[], None],
@@ -78,6 +79,7 @@ class KeyboardController:
         self._open_settings = open_settings
         self._open_link_templates = open_link_templates
         self._shift_view_date = shift_view_date
+        self._shift_log_date = shift_log_date
         self._toggle_done_selected_items = toggle_done_selected_items
         self._skip_selected_items = skip_selected_items
         self._carry_over_selected_items = carry_over_selected_items
@@ -151,6 +153,13 @@ class KeyboardController:
             else:
                 self._move_main_selection(delta)
             return
+
+        if e.key.arrow_left or e.key.arrow_right:
+            if not (e.modifiers.shift or e.modifiers.ctrl or e.modifiers.meta or e.modifiers.alt):
+                # 作業ログ表示中は、←/→で表示する日を前日・翌日へ切り替える
+                if self._is_log_open():
+                    self._shift_log_date(1 if e.key.arrow_right else -1)
+                return
 
         if (e.key.arrow_left or e.key.arrow_right) and e.modifiers.shift:
             if self._state.screen is Screen.MAIN and not self._is_dialog_open():
