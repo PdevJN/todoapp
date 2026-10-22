@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from todoapp.domain.models import ScheduleType, TodoItem
 from todoapp.ui.formatting import (
     carried_badge_text,
@@ -9,6 +11,7 @@ from todoapp.ui.formatting import (
     format_estimate_cell,
     format_gap,
     format_hhmm,
+    format_signed_hhmm,
     format_weekday,
     format_work_balance,
     gap_background,
@@ -187,3 +190,12 @@ def test_carried_badge_text_is_none_when_not_carried_or_not_one_time() -> None:
 
     assert carried_badge_text(plain) is None
     assert carried_badge_text(changed) is None
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [(5400, "+01:30"), (-2700, "-00:45"), (0, "00:00"), (10, "00:00"), (-20, "00:00"), (90, "+00:02"), (-73800, "-20:30")],
+)
+def test_format_signed_hhmm(seconds: float, expected: str) -> None:
+    # 秒は四捨五入して分にし、分に丸めて0なら符号を付けない
+    assert format_signed_hhmm(seconds) == expected

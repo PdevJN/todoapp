@@ -348,11 +348,32 @@ class ExecutionRecord:
 
 
 @dataclass
+class DailyEstimate:
+    """ある日に設定した`本日の見積り`の履歴(日付×アイテム×秒)。
+
+    `TodoItem`の`本日の見積り`は最後に設定した1日分しか持たないため、過去日の集計用に残す。
+    """
+
+    day: date
+    item_id: str
+    seconds: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"date": self.day.isoformat(), "item_id": self.item_id, "seconds": self.seconds}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DailyEstimate:
+        return cls(day=date.fromisoformat(data["date"]), item_id=data["item_id"], seconds=int(data["seconds"]))
+
+
+@dataclass
 class AppData:
     items: list[TodoItem]
     records: list[ExecutionRecord]
     categories: list[Category] = field(default_factory=list)
     link_templates: list[LinkTemplate] = field(default_factory=list)
+    estimate_history: list[DailyEstimate] = field(default_factory=list)
+    workday_overrides: dict[date, bool] = field(default_factory=dict)  # 既定(平日・祝日以外)と違う稼働日の指定
 
 
 def _clamped_day(anchor_day: int, target: date) -> int:

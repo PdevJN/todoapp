@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import shutil
 from collections.abc import Callable, Mapping
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from todoapp.domain.models import AppData, Category, ExecutionRecord, LinkTemplate, TodoItem
+from todoapp.domain.models import AppData, Category, DailyEstimate, ExecutionRecord, LinkTemplate, TodoItem
 from todoapp.repository.safe_io import atomic_write_text, backup_path, quarantine
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 DEFAULT_PATH = Path.home() / ".todoapp" / "todos.json"
 
@@ -23,7 +24,20 @@ def _migrate_v1_to_v2(raw: dict[str, Any]) -> dict[str, Any]:
     return {**raw, "version": 2, "items": items, "link_templates": []}
 
 
-MIGRATIONS: dict[int, Migration] = {1: _migrate_v1_to_v2}
+def _migrate_v2_to_v3(raw: dict[str, Any]) -> dict[str, Any]:
+    """v3で日ごとの見積り履歴(`estimate_history`)と稼働日の上書き(`workday_overrides`)を追加した。
+
+    移行時点で有効な`本日の見積り`は、導入日の見積りを失わないよう履歴へ入れる。
+    """
+    history = []
+    for item in raw["items"]:
+        seconds = round(item.get("today_estimate_hours", 0.0) * 3600)
+        if item.get("today_estimate_date") and seconds > 0:
+            history.append({"date": item["today_estimate_date"], "item_id": item["id"], "seconds": seconds})
+    return {**raw, "version": 3, "estimate_history": history, "workday_overrides": {}}
+
+
+MIGRATIONS: dict[int, Migration] = {1: _migrate_v1_to_v2, 2: _migrate_v2_to_v3}
 
 
 class UnsupportedSchemaVersionError(Exception):
@@ -80,7 +94,18 @@ class JsonTodoRepository:
         records = [ExecutionRecord.from_dict(record) for record in raw["records"]]
         categories = [Category.from_dict(category) for category in raw.get("categories", [])]
         link_templates = [LinkTemplate.from_dict(template) for template in raw.get("link_templates", [])]
-        return AppData(items=items, records=records, categories=categories, link_templates=link_templates)
+        estimate_history = [DailyEstimate.from_dict(entry) for entry in raw.get("estimate_history", [])]
+        workday_overrides = {
+            date.fromisoformat(day): bool(workday) for day, workday in raw.get("workday_overrides", {}).items()
+        }
+        return AppData(
+            items=items,
+            records=records,
+            categories=categories,
+            link_templates=link_templates,
+            estimate_history=estimate_history,
+            workday_overrides=workday_overrides,
+        )
 
     def save(self, data: AppData) -> None:
         payload = {
@@ -89,5 +114,7 @@ class JsonTodoRepository:
             "records": [record.to_dict() for record in data.records],
             "categories": [category.to_dict() for category in data.categories],
             "link_templates": [template.to_dict() for template in data.link_templates],
+            "estimate_history": [entry.to_dict() for entry in data.estimate_history],
+            "workday_overrides": {day.isoformat(): workday for day, workday in sorted(data.workday_overrides.items())},
         }
         atomic_write_text(self._path, json.dumps(payload, ensure_ascii=False, indent=2), backup=True)

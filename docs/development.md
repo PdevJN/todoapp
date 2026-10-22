@@ -17,10 +17,11 @@ src/todoapp/
 │   ├── models.py            # TodoItem(完了日done_dateを含む)・Category・LinkTemplate・ItemLink(URL組み立てresolve_link_url()・検証)・ExecutionRecord・is_done()/DoneFilter等
 │   ├── service.py           # TodoService(実行・完了・集計・GAP等のユースケース)
 │   ├── undo.py              # Undo/Redoの履歴(Snapshot・UndoHistory。編集系の操作を50件まで)
-│   └── record_layout.py     # 作業ログの時間編集の吸着ロジック(1分単位・隣接記録の境界へ密着)の純粋関数
+│   ├── record_layout.py     # 作業ログの時間編集の吸着ロジック(1分単位・隣接記録の境界へ密着)の純粋関数
+│   └── work_summary.py      # 稼働集計の純粋関数(稼働日判定・期間検証・稼働日数/合計/残業時間/見積りGAPの集計)
 ├── repository/     # JSON永続化(json_repository.py: todos.json / config_repository.py: config.json / holiday_repository.py: holidays.json・祝日CSV取得 / alive_repository.py: alive.json・実行中の生存時刻)
 ├── ui/              # NiceGUI画面
-│   ├── settings_dialog.py       # 設定ダイアログ(`o`キー。標準労働時間・スリープ検知)
+│   ├── settings_dialog.py       # 設定ダイアログ(`o`キー。標準労働時間・残業時間の目標・スリープ検知)
 │   ├── item_links.py            # 一覧のリンクアイコン(1件は直接、2件以上はメニューで開く。webbrowser.open)
 │   ├── link_rows_editor.py      # アイテム編集フォームのリンク欄(テンプレートの置換項目ごとの入力欄)
 │   ├── link_template_dialog.py  # リンクテンプレートの管理ダイアログ(`u`キー)
@@ -30,7 +31,8 @@ src/todoapp/
 │   ├── record_timeline_dialog.py # 作業ログの時間編集(日表示カレンダー上のドラッグ&ドロップ)
 │   ├── calendar_view.py         # 実行履歴のカレンダー表示(当日/週/月、FullCalendar)
 │   ├── vendor/fullcalendar/     # FullCalendarのベンダリング(NiceGUI公式exampleを元に、ドラッグ&ドロップの通知・祝日ツールチップ・密着ガイド線などを追加。`lib/ja.global.min.js`は日本語locale)
-│   ├── category_summary_dialog.py # 集計画面(カテゴリ別/アイテム別、円グラフ・GAP)
+│   ├── category_summary_dialog.py # 集計画面(カテゴリ別/アイテム別/稼働集計、円グラフ・GAP)
+│   ├── work_summary_panel.py    # 集計画面の稼働集計タブ(月/期間・残業時間・日別グラフ・稼働日の選択)
 │   ├── category_*.py            # カテゴリ一覧/編集/種別入力/選択の各ダイアログ
 │   ├── edit_dialog.py           # アイテム編集フォーム
 │   ├── record_edit_dialog.py    # 記録編集フォーム

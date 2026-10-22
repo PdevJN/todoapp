@@ -21,6 +21,7 @@ from test.ui.harness import (
     make_item,
     press,
     select_toggle,
+    set_value,
     shows,
 )
 from todoapp.domain.models import Category, ScheduleType
@@ -681,6 +682,31 @@ async def test_settings_dialog_toggles_suspend_detection_and_saves_to_config(app
     click_displayed(app_user, "保存")
 
     assert json.loads(config_path.read_text(encoding="utf-8"))["suspend_detection"] is True
+
+
+async def test_settings_dialog_saves_overtime_target_hours(app_user: User, app_env: AppEnv) -> None:
+    config_path = app_env.directory / "config.json"
+    await app_user.open("/")
+
+    await press(app_user, "o")
+    await shows(app_user, "残業時間の目標(時間)")
+    set_value(app_user, "settings-overtime", 30.0)
+    click_displayed(app_user, "保存")
+
+    assert json.loads(config_path.read_text(encoding="utf-8"))["overtime_target_hours"] == 30.0
+
+
+async def test_settings_dialog_rejects_out_of_range_overtime_target(app_user: User, app_env: AppEnv) -> None:
+    config_path = app_env.directory / "config.json"
+    await app_user.open("/")
+
+    await press(app_user, "o")
+    await shows(app_user, "残業時間の目標(時間)")
+    set_value(app_user, "settings-overtime", 745.0)
+    click_displayed(app_user, "保存")
+
+    await app_user.should_see("0以上744以下で入力してください")
+    assert not config_path.exists()
 
 
 # --- Undo/Redo ----------------------------------------------------------------------------

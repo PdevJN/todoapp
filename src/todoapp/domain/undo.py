@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from todoapp.domain.models import Category, LinkTemplate, TodoItem
+from todoapp.domain.models import Category, DailyEstimate, LinkTemplate, TodoItem
 
 MAX_HISTORY = 50
 
@@ -15,6 +15,7 @@ class Snapshot:
     items: list[TodoItem]
     categories: list[Category]
     link_templates: list[LinkTemplate]
+    estimate_history: list[DailyEstimate] = field(default_factory=list)  # アイテムの編集と食い違わないよう一緒に戻す
 
 
 class UndoHistory:

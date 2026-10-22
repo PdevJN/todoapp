@@ -161,3 +161,26 @@ def test_load_falls_back_to_disabled_for_invalid_suspend_detection(tmp_path: Pat
     for invalid in invalid_values:
         path.write_text(json.dumps({"suspend_detection": invalid}), encoding="utf-8")
         assert ConfigRepository(path=path).load().suspend_detection is False
+
+
+def test_overtime_target_hours_defaults_to_twenty(tmp_path: Path) -> None:
+    assert ConfigRepository(path=tmp_path / "config.json").load().overtime_target_hours == 20.0
+
+
+def test_save_then_load_roundtrips_overtime_target_hours(tmp_path: Path) -> None:
+    repository = ConfigRepository(path=tmp_path / "config.json")
+    repository.save(AppConfig(overtime_target_hours=30.5))
+
+    assert repository.load().overtime_target_hours == 30.5
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [(0, 0.0), (20, 20.0), (744, 744.0), (744.1, 20.0), (-0.1, 20.0), ("30", 20.0), (None, 20.0), (True, 20.0)],
+)
+def test_load_overtime_target_hours_boundaries(tmp_path: Path, raw: object, expected: float) -> None:
+    # 0は「残業なし」を目標にする有効な値。範囲外・数値以外・真偽値は既定値に戻す
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"overtime_target_hours": raw}), encoding="utf-8")
+
+    assert ConfigRepository(path=path).load().overtime_target_hours == expected

@@ -11,7 +11,7 @@ from nicegui import ui
 from nicegui.testing import User
 from nicegui.testing.user_interaction import UserInteraction
 
-from todoapp.domain.models import AppData, Category, ExecutionRecord, ScheduleType, TodoItem
+from todoapp.domain.models import AppData, Category, DailyEstimate, ExecutionRecord, ScheduleType, TodoItem
 from todoapp.repository.json_repository import JsonTodoRepository
 
 _KEY_CODES = {"Escape": "Escape", "Enter": "Enter", "Delete": "Delete", "Backspace": "Backspace"} | {
@@ -34,8 +34,18 @@ class AppEnv:
         items: list[TodoItem] | None = None,
         records: list[ExecutionRecord] | None = None,
         categories: list[Category] | None = None,
+        estimate_history: list[DailyEstimate] | None = None,
+        workday_overrides: dict[date, bool] | None = None,
     ) -> None:
-        self.todos_repository.save(AppData(items=items or [], records=records or [], categories=categories or []))
+        self.todos_repository.save(
+            AppData(
+                items=items or [],
+                records=records or [],
+                categories=categories or [],
+                estimate_history=estimate_history or [],
+                workday_overrides=workday_overrides or {},
+            )
+        )
 
     def todos(self) -> AppData:
         return self.todos_repository.load()
@@ -161,7 +171,26 @@ def select_toggle(user: User, option_label: str) -> None:
     raise AssertionError(f"トグルの選択肢が見つかりません: {option_label}")
 
 
+def set_value(user: User, marker: str, value: Any) -> None:
+    """マーカーを付けた要素(入力欄など)の値を直接設定する(`user.type`が数値入力に対応していないため)。"""
+    [element] = user.find(marker=marker).elements
+    assert user.client is not None
+    with user.client:
+        element.value = value
+
+
 def input_value(interaction: UserInteraction[Any]) -> str:
     [element] = interaction.elements
     assert isinstance(element, ui.input)
     return str(element.value)
+
+
+def select_tab(user: User, label: str) -> None:
+    """表示中の`ui.tabs`の選択を切り替える(`user`のクリックはタブに対応していないため、値を直接設定する)。"""
+    for tabs in user.find(kind=ui.tabs).elements:
+        if is_displayed(tabs):
+            assert user.client is not None
+            with user.client:
+                tabs.value = label
+            return
+    raise AssertionError(f"タブが見つかりません: {label}")

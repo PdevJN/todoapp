@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import functools
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from typing import Concatenate, NamedTuple, Protocol
@@ -12,6 +12,7 @@ from todoapp.domain.models import (
     UNCATEGORIZED_NAME,
     AppData,
     Category,
+    DailyEstimate,
     DoneFilter,
     ExecutionRecord,
     ItemLink,
@@ -28,6 +29,7 @@ from todoapp.domain.models import (
     today_estimate_seconds,
 )
 from todoapp.domain.undo import Snapshot, UndoHistory
+from todoapp.domain.work_summary import WorkSummary, build_work_summary, is_workday
 
 
 def undoable[**P, R](
@@ -111,6 +113,14 @@ class TodoService:
     def link_templates(self) -> list[LinkTemplate]:
         return self._data.link_templates
 
+    @property
+    def estimate_history(self) -> list[DailyEstimate]:
+        return self._data.estimate_history
+
+    @property
+    def workday_overrides(self) -> dict[date, bool]:
+        return self._data.workday_overrides
+
     def _save(self) -> None:
         self._repository.save(self._data)
 
@@ -119,6 +129,7 @@ class TodoService:
             items=copy.deepcopy(self._data.items),
             categories=copy.deepcopy(self._data.categories),
             link_templates=copy.deepcopy(self._data.link_templates),
+            estimate_history=copy.deepcopy(self._data.estimate_history),
         )
 
     def _restore(self, snapshot: Snapshot) -> None:
@@ -126,6 +137,7 @@ class TodoService:
         self._data.items = copy.deepcopy(snapshot.items)
         self._data.categories = copy.deepcopy(snapshot.categories)
         self._data.link_templates = copy.deepcopy(snapshot.link_templates)
+        self._data.estimate_history = copy.deepcopy(snapshot.estimate_history)
         items_by_id = {item.id: item for item in self._data.items}
         for record in self._data.records:
             item = items_by_id.get(record.item_id)
@@ -249,8 +261,26 @@ class TodoService:
         if today_estimate_hours is not None:
             # 限定見積りは設定した日だけ有効。0で解除する
             item.today_estimate_hours = today_estimate_hours
-            item.today_estimate_date = self._clock().date() if today_estimate_hours > 0 else None
+            today = self._clock().date()
+            item.today_estimate_date = today if today_estimate_hours > 0 else None
+            self._record_daily_estimate(item_id, today, round(today_estimate_hours * 3600))
         self._save()
+
+    def _record_daily_estimate(self, item_id: str, day: date, seconds: int) -> None:
+        """日ごとの見積り履歴を更新する(同じ日・アイテムは1件だけ。0秒は削除)。
+
+        既存の1件は同じ位置で置き換える(付け直すと順序だけが変わり、変更の無い保存がUndoの履歴に積まれるため)。
+        """
+        history = self._data.estimate_history
+        for index, entry in enumerate(history):
+            if entry.day == day and entry.item_id == item_id:
+                if seconds > 0:
+                    entry.seconds = seconds
+                else:
+                    del history[index]
+                return
+        if seconds > 0:
+            history.append(DailyEstimate(day, item_id, seconds))
 
     def running_record(self) -> ExecutionRecord | None:
         for record in self._data.records:
@@ -499,6 +529,42 @@ class TodoService:
                 continue
             total += today_estimate_seconds(item, today) or 0
         return total
+
+    def work_summary(
+        self, start: date, end: date, holidays: Mapping[date, str], standard_hours: float
+    ) -> WorkSummary:
+        """期間の稼働集計。実績は実行記録を開始日ごとに合計する(実行中の記録は現在時刻まで)。"""
+        now = self._clock()
+        estimates: dict[date, int] = {}
+        for entry in self._data.estimate_history:
+            if start <= entry.day <= end:
+                estimates[entry.day] = estimates.get(entry.day, 0) + entry.seconds
+        actuals: dict[date, float] = {}
+        for record in self._data.records:
+            day = record.start_time.date()
+            if start <= day <= end:
+                actuals[day] = actuals.get(day, 0.0) + record.elapsed_seconds(now)
+        return build_work_summary(
+            start=start,
+            end=end,
+            today=now.date(),
+            standard_seconds=round(standard_hours * 3600),
+            overrides=self._data.workday_overrides,
+            holidays=holidays,
+            estimates=estimates,
+            actuals=actuals,
+        )
+
+    def set_workday(self, day: date, workday: bool, holidays: Mapping[date, str]) -> None:
+        """日ごとの稼働日の指定を保存する。既定(平日かつ祝日でない)と同じ値なら上書きを削除する。
+
+        Undoの対象外(編集系ではなく、カレンダーでの頻繁な切り替えのため)なので`@undoable`は付けない。
+        """
+        if workday == is_workday(day, {}, holidays):
+            self._data.workday_overrides.pop(day, None)
+        else:
+            self._data.workday_overrides[day] = workday
+        self._save()
 
     def is_over_estimate(self, item_id: str) -> bool:
         item = self._find_item(item_id)

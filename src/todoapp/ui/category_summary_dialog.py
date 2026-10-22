@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from typing import Any
 
@@ -9,10 +10,12 @@ from todoapp.domain.models import Category
 from todoapp.domain.service import ItemGapRow, TodoService
 from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.formatting import DONE_TEXT_CLASSES, format_duration, format_estimate_cell, format_gap, gap_background
+from todoapp.ui.work_summary_panel import WorkSummaryPanel
 
 UNCATEGORIZED_COLOR = "#9e9e9e"
 _TAB_CATEGORY = "カテゴリ別"
 _TAB_ITEM = "アイテム別"
+_TAB_WORK = "稼働集計"
 # valueは秒。カテゴリ別は一覧と同じHH:MM:SSで表示する
 _CATEGORY_TOOLTIP_FORMATTER = (
     "p => { const s = Math.round(p.value); const f = n => String(n).padStart(2, '0');"
@@ -65,12 +68,19 @@ def gap_pie_data(rows: list[ItemGapRow]) -> list[dict[str, Any]]:
 
 
 class CategorySummaryDialog(DialogMixin):
-    def __init__(self, service: TodoService) -> None:
+    def __init__(
+        self,
+        service: TodoService,
+        get_standard_work_hours: Callable[[], float],
+        get_overtime_target_hours: Callable[[], float],
+        holidays: dict[date, str],
+    ) -> None:
         self._service = service
         self._selected_key: str | None = None
         self._built = False
-        # 円グラフの表示状態はタブごとに独立して持つ
-        self._pie_visible = {_TAB_CATEGORY: False, _TAB_ITEM: False}
+        # グラフの表示状態はタブごとに独立して持つ
+        self._pie_visible = {_TAB_CATEGORY: False, _TAB_ITEM: False, _TAB_WORK: False}
+        self.work_panel = WorkSummaryPanel(service, get_standard_work_hours, get_overtime_target_hours, holidays)
 
     def build(self) -> None:
         # アイテム別タブは列が多いため、他のダイアログ(最大w-[36rem])と同程度の幅に広げる
@@ -78,12 +88,19 @@ class CategorySummaryDialog(DialogMixin):
             with ui.row().classes("w-full items-center justify-between"):
                 ui.label("集計画面").classes("text-lg font-bold")
                 # 円グラフの表示中は、選択中と分かるようボタンの色を変える(テーマ選択と同じ考え方)
-                self.pie_button = ui.button(icon="pie_chart", on_click=self._toggle_pie).props("flat dense round")
-                self.pie_button.tooltip("円グラフの表示を切り替え")
+                self.pie_button = (
+                    ui.button(icon="pie_chart", on_click=self._toggle_pie)
+                    .props("flat dense round")
+                    .mark("summary-chart-toggle")
+                )
+                self.pie_button.tooltip("グラフの表示を切り替え")
             with ui.tabs(on_change=self._on_tab_change).classes("w-full") as self.tabs:
                 self.category_tab = ui.tab(_TAB_CATEGORY)
                 self.item_tab = ui.tab(_TAB_ITEM)
-            with ui.tab_panels(self.tabs, value=_TAB_CATEGORY).classes("w-full"):
+                self.work_tab = ui.tab(_TAB_WORK)
+            # タブの領域が縮められると、はみ出した内容(稼働日の格子の下の方など)がクリップされて押せなくなる。
+            # 縮めずに内容の高さを保ち、ダイアログ(カード)側をスクロールさせる
+            with ui.tab_panels(self.tabs, value=_TAB_CATEGORY).classes("w-full flex-none"):
                 with ui.tab_panel(self.category_tab).classes("p-0 gap-2"):
                     self.pie_container, self.pie_chart, self.pie_empty_label = self._build_pie(
                         _CATEGORY_TOOLTIP_FORMATTER, "本日の記録はまだありません"
@@ -97,6 +114,8 @@ class CategorySummaryDialog(DialogMixin):
                         _GAP_TOOLTIP_FORMATTER, "GAPのあるアイテムがありません"
                     )
                     self.item_container = ui.column().classes("w-full gap-0")
+                with ui.tab_panel(self.work_tab).classes("p-0 gap-2"):
+                    self.work_panel.build()
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
         self._built = True
 
@@ -108,8 +127,9 @@ class CategorySummaryDialog(DialogMixin):
         return container, chart, empty_label
 
     def open(self) -> None:
-        self._pie_visible = {_TAB_CATEGORY: False, _TAB_ITEM: False}
+        self._pie_visible = {_TAB_CATEGORY: False, _TAB_ITEM: False, _TAB_WORK: False}
         self.tabs.set_value(_TAB_CATEGORY)
+        self.work_panel.reset()
         self.refresh()
         self.dialog.open()
 
@@ -118,6 +138,8 @@ class CategorySummaryDialog(DialogMixin):
         category_totals = self._service.category_today_totals(today)
         self._refresh_pie(self._service.category_today_all_totals(today))
         self._refresh_items(self._service.item_gap_rows(today))
+        if self.is_open():
+            self.work_panel.refresh()
         categories_by_id = {c.id: c for c in self._service.categories}
 
         self.category_container.clear()
@@ -183,6 +205,7 @@ class CategorySummaryDialog(DialogMixin):
     def _apply_pie_visibility(self) -> None:
         self.pie_container.set_visibility(self._pie_visible[_TAB_CATEGORY])
         self.gap_pie_container.set_visibility(self._pie_visible[_TAB_ITEM])
+        self.work_panel.chart_container.set_visibility(self._pie_visible[_TAB_WORK])
         # 表示中の円グラフは、選択中と分かるよう表示中のタブでのボタンの色を変える
         self.pie_button.props(f"color={'primary' if self._pie_visible[self.tabs.value] else 'grey'}")
 
