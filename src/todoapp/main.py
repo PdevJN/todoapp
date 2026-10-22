@@ -356,6 +356,7 @@ def build_app_ui(
         open_settings=settings_dialog.open,
         open_link_templates=link_template_dialog.open,
         shift_view_date=main_view.shift_view_date,
+        shift_log_date=log_view.shift_view_date,
         toggle_done_selected_items=toggle_done_selected_items,
         skip_selected_items=skip_selected_items,
         carry_over_selected_items=carry_over_selected_items,

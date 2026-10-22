@@ -117,7 +117,7 @@ def _copy_button(user: User) -> ui.button | None:
 async def _open_log(user: User) -> None:
     await user.open("/")
     await press(user, "l")
-    await shows(user, "本日の作業ログ")
+    await shows(user, "作業ログ")
 
 
 async def test_log_without_records_shows_placeholder(app_user: User, app_env: AppEnv) -> None:
@@ -382,7 +382,7 @@ async def test_reopening_log_returns_to_order_mode(app_user: User, app_env: AppE
     select_toggle(app_user, "カテゴリ別")
     await shows(app_user, "開発")
     click_displayed(app_user, "閉じる")
-    await hides(app_user, "本日の作業ログ")
+    await hides(app_user, "作業ログ")
 
     await press(app_user, "l")
 
@@ -425,3 +425,87 @@ async def test_category_mode_truncates_long_category_name_and_shows_full_name_in
     labels = _labels_with_text(app_user, _LONG_CATEGORY_NAME)
     assert len(labels) == 2  # 行の表示と、ツールチップ先頭の全文
     assert sum("truncate" in set(label.classes) for label in labels) == 1
+
+
+# --- 過去の履歴の表示 -----------------------------------------------------------------------
+
+
+def _yesterday_at(hour: int, minute: int = 0) -> datetime:
+    return datetime.combine(TODAY - timedelta(days=1), time(hour, minute))
+
+
+def _click_marker(user: User, marker: str) -> None:
+    user.find(marker=marker).click()
+
+
+async def test_log_title_has_no_today_prefix(app_user: User, app_env: AppEnv) -> None:
+    await _open_log(app_user)
+
+    await hides(app_user, "本日の作業ログ")
+
+
+async def test_log_shows_date_navigation_starting_from_today(app_user: User, app_env: AppEnv) -> None:
+    await _open_log(app_user)
+
+    await shows(app_user, f"({'月火水木金土日'[TODAY.weekday()]})")
+
+
+async def test_log_prev_day_shows_that_days_records_only(app_user: User, app_env: AppEnv) -> None:
+    today_item = _done_item("今日の作業")
+    past_item = _done_item("昨日の作業")
+    app_env.seed(
+        items=[today_item, past_item],
+        records=[make_record(today_item, _at(9), _at(10)), make_record(past_item, _yesterday_at(13), _yesterday_at(14))],
+    )
+    await _open_log(app_user)
+    await shows(app_user, "今日の作業")
+    await hides(app_user, "昨日の作業")
+
+    _click_marker(app_user, "log-prev-day")
+
+    await shows(app_user, "昨日の作業")
+    await hides(app_user, "今日の作業")
+
+
+async def test_log_past_day_without_records_shows_placeholder(app_user: User, app_env: AppEnv) -> None:
+    await _open_log(app_user)
+
+    _click_marker(app_user, "log-prev-day")
+
+    await shows(app_user, "この日の記録はありません")
+
+
+async def test_log_next_day_returns_to_today(app_user: User, app_env: AppEnv) -> None:
+    await _open_log(app_user)
+    _click_marker(app_user, "log-prev-day")
+    await shows(app_user, "この日の記録はありません")
+
+    _click_marker(app_user, "log-next-day")
+
+    await shows(app_user, "本日の記録はまだありません")
+
+
+async def test_log_category_mode_totals_follow_view_date(app_user: User, app_env: AppEnv) -> None:
+    work = Category(name="開発")
+    item = _done_item("設計", category_id=work.id)
+    app_env.seed(items=[item], categories=[work], records=[make_record(item, _yesterday_at(9), _yesterday_at(11))])
+    await _open_log(app_user)
+    select_toggle(app_user, "カテゴリ別")
+    await shows(app_user, "00:00")
+
+    _click_marker(app_user, "log-prev-day")
+
+    await shows(app_user, "02:00")
+    await shows(app_user, "・設計")
+
+
+async def test_log_reopen_starts_from_today(app_user: User, app_env: AppEnv) -> None:
+    await _open_log(app_user)
+    _click_marker(app_user, "log-prev-day")
+    await shows(app_user, "この日の記録はありません")
+    click_displayed(app_user, "閉じる")
+    await hides(app_user, "作業ログ")
+
+    await press(app_user, "l")
+
+    await shows(app_user, "本日の記録はまだありません")

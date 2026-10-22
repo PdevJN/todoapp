@@ -610,7 +610,7 @@ async def test_dialog_shortcuts_open_their_dialogs(app_user: User, app_env: AppE
     await app_user.open("/")
 
     await press(app_user, "l")
-    await shows(app_user, "本日の作業ログ")
+    await shows(app_user, "作業ログ")
 
     await press(app_user, "g")
     await shows(app_user, "カテゴリ一覧")
