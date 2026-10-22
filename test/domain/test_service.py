@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from todoapp.domain.models import AppData, DoneFilter, ItemLink, ScheduleType, today_estimate_seconds
+from todoapp.domain.models import AppData, DailyEstimate, DoneFilter, ItemLink, ScheduleType, today_estimate_seconds
 from todoapp.domain.service import ItemGapRow, TodoService
 
 
@@ -1423,3 +1423,150 @@ def test_carry_over_does_not_carry_the_today_estimate_to_the_next_day() -> None:
     service.carry_over([item.id], date(2026, 8, 30))
 
     assert today_estimate_seconds(item, date(2026, 8, 31)) is None
+
+
+# --- 稼働集計(見積り履歴・work_summary・set_workday) ----------------------------------------
+
+
+def test_edit_item_records_daily_estimate_history() -> None:
+    service, _, _ = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+
+    service.edit_item(item.id, today_estimate_hours=1.5)
+
+    assert service.estimate_history == [DailyEstimate(date(2026, 8, 30), item.id, 5400)]
+
+
+def test_edit_item_updates_the_same_day_history_instead_of_adding() -> None:
+    service, _, _ = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(item.id, today_estimate_hours=1.0)
+
+    service.edit_item(item.id, today_estimate_hours=2.0)
+
+    assert service.estimate_history == [DailyEstimate(date(2026, 8, 30), item.id, 7200)]
+
+
+def test_edit_item_with_zero_removes_only_todays_history() -> None:
+    service, _, clock = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(item.id, today_estimate_hours=1.0)
+    clock.advance(86400)  # 翌日
+    service.edit_item(item.id, today_estimate_hours=2.0)
+
+    service.edit_item(item.id, today_estimate_hours=0.0)
+
+    assert service.estimate_history == [DailyEstimate(date(2026, 8, 30), item.id, 3600)]
+
+
+def test_history_survives_item_deletion() -> None:
+    service, _, _ = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(item.id, today_estimate_hours=1.0)
+
+    service.delete_item(item.id)
+
+    assert len(service.estimate_history) == 1
+
+
+def test_undo_restores_estimate_history_together_with_the_item() -> None:
+    service, _, _ = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(item.id, today_estimate_hours=1.0)
+
+    service.undo()
+
+    assert service.estimate_history == []
+    assert service.items[0].today_estimate_hours == 0.0
+
+
+def test_edit_item_without_today_estimate_leaves_history_untouched() -> None:
+    service, _, _ = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(item.id, today_estimate_hours=1.0)
+
+    service.edit_item(item.id, name="設計2")
+
+    assert len(service.estimate_history) == 1
+
+
+def test_set_workday_stores_only_differences_from_default() -> None:
+    service, repository, _ = _service()
+    sunday, monday = date(2026, 8, 30), date(2026, 8, 31)
+
+    service.set_workday(sunday, True, {})  # 日曜を稼働日に
+    service.set_workday(monday, False, {})  # 月曜を非稼働日に
+    assert service.workday_overrides == {sunday: True, monday: False}
+    assert repository.saved is not None and repository.saved.workday_overrides == {sunday: True, monday: False}
+
+    service.set_workday(sunday, False, {})  # 既定(非稼働)に戻す
+    service.set_workday(monday, True, {})
+    assert service.workday_overrides == {}
+
+
+def test_set_workday_default_considers_holidays() -> None:
+    service, _, _ = _service()
+    holiday = date(2026, 8, 31)
+
+    service.set_workday(holiday, True, {holiday: "臨時休業"})  # 祝日を稼働日に → 既定(非稼働)と違う
+    assert service.workday_overrides == {holiday: True}
+    service.set_workday(holiday, False, {holiday: "臨時休業"})
+    assert service.workday_overrides == {}
+
+
+def test_work_summary_combines_estimates_and_records() -> None:
+    service, _, clock = _service()  # 2026-08-30(日曜) 09:00
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(item.id, today_estimate_hours=2.0)
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+
+    summary = service.work_summary(date(2026, 8, 30), date(2026, 8, 30), {}, 8.0)
+
+    assert summary.workday_count == 0  # 日曜は既定で非稼働
+    assert summary.actual_seconds == 600
+    assert summary.overtime_seconds == 600  # 休日出勤の実績
+    assert summary.estimate_seconds == 7200
+    assert summary.gap_seconds == 600 - 7200
+
+
+def test_work_summary_includes_running_record_up_to_now() -> None:
+    service, _, clock = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.start(item.id)
+    clock.advance(300)
+
+    summary = service.work_summary(date(2026, 8, 30), date(2026, 8, 30), {}, 8.0)
+
+    assert summary.actual_seconds == 300
+
+
+def test_work_summary_assigns_records_to_their_own_day() -> None:
+    service, _, clock = _service()
+    item = service.add_item("設計", ScheduleType.DAILY, date(2026, 8, 30))
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+    clock.advance(86400)
+    service.start(item.id)
+    clock.advance(1200)
+    service.stop_running()
+
+    summary = service.work_summary(date(2026, 8, 30), date(2026, 8, 31), {}, 8.0)
+
+    assert [row.actual_seconds for row in summary.rows] == [600, 1200]
+
+
+def test_resaving_an_unchanged_today_estimate_does_not_push_an_undo_entry() -> None:
+    # 変更の無い保存で履歴の順序だけが変わり、取り消しの履歴が積まれないこと
+    service, _, _ = _service()
+    first = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    second = service.add_item("B", ScheduleType.DAILY, date(2026, 8, 30))
+    service.edit_item(first.id, today_estimate_hours=1.0)
+    service.edit_item(second.id, today_estimate_hours=2.0)
+
+    service.edit_item(first.id, today_estimate_hours=1.0)  # 同じ値で保存し直す
+
+    assert service.undo() == "アイテムを編集"  # 取り消すのは、Bの見積りの設定
+    assert [e.item_id for e in service.estimate_history] == [first.id]

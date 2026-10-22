@@ -5,7 +5,15 @@ from typing import Any
 
 import pytest
 
-from todoapp.domain.models import AppData, ExecutionRecord, ItemLink, LinkTemplate, ScheduleType, TodoItem
+from todoapp.domain.models import (
+    AppData,
+    DailyEstimate,
+    ExecutionRecord,
+    ItemLink,
+    LinkTemplate,
+    ScheduleType,
+    TodoItem,
+)
 from todoapp.repository.json_repository import SCHEMA_VERSION, JsonTodoRepository, UnsupportedSchemaVersionError
 
 
@@ -195,7 +203,7 @@ def test_save_then_load_roundtrips_links_and_templates(tmp_path: Path) -> None:
     repository.save(data)
 
     assert repository.load() == data
-    assert json.loads((tmp_path / "todos.json").read_text(encoding="utf-8"))["version"] == 2
+    assert json.loads((tmp_path / "todos.json").read_text(encoding="utf-8"))["version"] == SCHEMA_VERSION
 
 
 def test_load_migrates_v1_file_and_keeps_pre_migration_copy(tmp_path: Path) -> None:
@@ -213,3 +221,55 @@ def test_load_migrates_v1_file_and_keeps_pre_migration_copy(tmp_path: Path) -> N
     assert loaded.items[0].links == []
     assert loaded.link_templates == []
     assert (tmp_path / "todos.json.v1.bak").read_text(encoding="utf-8") == original
+
+
+def test_save_then_load_roundtrips_estimate_history_and_workday_overrides(tmp_path: Path) -> None:
+    repository = JsonTodoRepository(path=tmp_path / "todos.json")
+    data = AppData(
+        items=[],
+        records=[],
+        estimate_history=[DailyEstimate(date(2026, 10, 22), "i1", 5400)],
+        workday_overrides={date(2026, 10, 12): True, date(2026, 10, 13): False},
+    )
+
+    repository.save(data)
+
+    assert repository.load() == data
+    raw = json.loads((tmp_path / "todos.json").read_text(encoding="utf-8"))
+    assert raw["version"] == 3
+    assert raw["workday_overrides"] == {"2026-10-12": True, "2026-10-13": False}
+
+
+def _v2_item(item_id: str, name: str, **extra: Any) -> dict[str, Any]:
+    base = {
+        "id": item_id,
+        "name": name,
+        "schedule_type": "daily",
+        "anchor_date": "2026-10-22",
+        "estimate_hours": 0.0,
+        "links": [],
+    }
+    return {**base, **extra}
+
+
+def test_load_migrates_v2_file_and_seeds_history_from_todays_estimates(tmp_path: Path) -> None:
+    path = tmp_path / "todos.json"
+    items = [
+        _v2_item("i1", "設計", today_estimate_hours=1.5, today_estimate_date="2026-10-22"),
+        _v2_item("i2", "見積りなし"),
+        _v2_item("i3", "0時間", today_estimate_hours=0.0, today_estimate_date="2026-10-22"),
+    ]
+    path.write_text(
+        json.dumps(
+            {"version": 2, "items": items, "records": [], "categories": [], "link_templates": []},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    original = path.read_text(encoding="utf-8")
+
+    loaded = JsonTodoRepository(path=path).load()
+
+    assert loaded.estimate_history == [DailyEstimate(date(2026, 10, 22), "i1", 5400)]
+    assert loaded.workday_overrides == {}
+    assert (tmp_path / "todos.json.v2.bak").read_text(encoding="utf-8") == original

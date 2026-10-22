@@ -80,8 +80,9 @@ def build_app_ui(
         config.week_start = week_start
         config_repository.save(config)
 
-    def _on_settings_save(hours: float, suspend_detection: bool) -> None:
+    def _on_settings_save(hours: float, overtime_target: float, suspend_detection: bool) -> None:
         config.standard_work_hours = hours
+        config.overtime_target_hours = overtime_target
         config.suspend_detection = suspend_detection
         config_repository.save(config)
         refresh_all()
@@ -253,7 +254,12 @@ def build_app_ui(
         open_category_kind=category_kind_dialog.open_for,
     )
     category_edit_dialog = CategoryEditDialog(service, refresh_all=refresh_all, confirm_dialog=confirm_dialog)
-    category_summary_dialog = CategorySummaryDialog(service)
+    category_summary_dialog = CategorySummaryDialog(
+        service,
+        lambda: config.standard_work_hours,
+        lambda: config.overtime_target_hours,
+        holidays,
+    )
     category_pick_dialog = CategoryPickDialog(service, refresh_all=refresh_all)
     help_dialog = HelpDialog()
 
@@ -271,7 +277,10 @@ def build_app_ui(
     list_view = ListView(service, state, refresh_all=refresh_all)
     edit_dialog = EditDialog(service, refresh_all=refresh_all, get_standard_work_hours=lambda: config.standard_work_hours)
     settings_dialog = SettingsDialog(
-        lambda: config.standard_work_hours, lambda: config.suspend_detection, _on_settings_save
+        lambda: config.standard_work_hours,
+        lambda: config.overtime_target_hours,
+        lambda: config.suspend_detection,
+        _on_settings_save,
     )
     record_timeline_dialog = RecordTimelineDialog(service, refresh_all=refresh_all)
     log_view = LogView(service, state, open_timeline_edit=record_timeline_dialog.open_for)

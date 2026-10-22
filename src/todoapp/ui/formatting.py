@@ -34,6 +34,15 @@ def format_hhmm(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}"
 
 
+def format_signed_hhmm(seconds: float) -> str:
+    """符号付きの時分(`+01:30`/`-00:45`)。分に丸めて0なら符号を付けない。"""
+    total_minutes = (abs(round(seconds)) + 30) // 60
+    if total_minutes == 0:
+        return "00:00"
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{'+' if seconds > 0 else '-'}{hours:02d}:{minutes:02d}"
+
+
 def estimate_to_hours_minutes(estimate_hours: float) -> tuple[int, int]:
     """見積り(時間の小数)を、分単位に丸めた(時間, 分)に分ける。"""
     total_minutes = max(round(estimate_hours * 60), 0)
