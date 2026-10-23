@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import argparse
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date, datetime
+from typing import Any
 
 import httpx
 from nicegui import app, ui
@@ -410,14 +412,41 @@ def shutdown_app(service: TodoService, alive_store: AliveStore) -> None:
     alive_store.save(datetime.now())
 
 
-def main() -> None:
+LAUNCH_MODES = ("native", "web")
+DEFAULT_LAUNCH_MODE = "native"
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="todoapp", description="TODOアプリ")
+    parser.add_argument(
+        "--mode",
+        choices=LAUNCH_MODES,
+        default=DEFAULT_LAUNCH_MODE,
+        help="起動方法: native=ネイティブウィンドウ(既定)、web=ブラウザ",
+    )
+    parser.add_argument("--port", type=int, default=None, help="サーバーのポート(省略時はwebが8080、nativeは空きポート)")
+    return parser.parse_args(argv)
+
+
+def run_options(mode: str, port: int | None) -> dict[str, Any]:
+    """起動方法ごとの`ui.run()`の引数を返す。"""
+    options: dict[str, Any] = {"title": "TODO", "language": "ja", "reload": False, "port": port}
+    if mode == "web":
+        options.update(native=False, show=True)
+    else:
+        options.update(native=True, window_size=(620, 720))
+    return options
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    args = parse_args(argv)
     install_stderr_filter()
     alive_store = AliveRepository()
     global _shared_service
     _shared_service = recover_interrupted_run(JsonTodoRepository(), alive_store)
     service = _shared_service
     app.on_shutdown(lambda: shutdown_app(service, alive_store))
-    ui.run(native=True, window_size=(620, 720), title="TODO", language="ja", reload=False)
+    ui.run(**run_options(args.mode, args.port))
 
 
 if __name__ == "__main__":
