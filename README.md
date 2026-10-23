@@ -14,7 +14,13 @@ uv sync
 uv run todoapp
 ```
 
-pywebviewによるネイティブウィンドウが起動する。
+既定ではpywebviewによるネイティブウィンドウが起動する。`--mode`で起動方法を選べる。
+
+```bash
+uv run todoapp --mode native   # ネイティブウィンドウ(既定)
+uv run todoapp --mode web      # ブラウザのみ
+uv run todoapp --port 9000     # ポートを指定(省略時はwebが8080、nativeは空きポート)
+```
 
 ## 主な機能
 
