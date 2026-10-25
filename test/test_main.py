@@ -63,3 +63,9 @@ def test_run_options_per_mode() -> None:
     web = main.run_options("web", None)
     assert web["native"] is False
     assert web["show"] is True
+
+
+def test_run_options_sets_existing_favicon() -> None:
+    favicon = main.run_options("native", None)["favicon"]
+    assert favicon.is_file()
+    assert main.run_options("web", None)["favicon"] == favicon
