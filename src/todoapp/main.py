@@ -4,6 +4,7 @@ import argparse
 import json
 from collections.abc import Callable, Sequence
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -428,9 +429,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+FAVICON_PATH = Path(__file__).parent / "ui" / "static" / "favicon.svg"
+
+
 def run_options(mode: str, port: int | None) -> dict[str, Any]:
     """起動方法ごとの`ui.run()`の引数を返す。"""
-    options: dict[str, Any] = {"title": "TODO", "language": "ja", "reload": False, "port": port}
+    options: dict[str, Any] = {
+        "title": "TODO",
+        "language": "ja",
+        "favicon": FAVICON_PATH,
+        "reload": False,
+        "port": port,
+    }
     if mode == "web":
         options.update(native=False, show=True)
     else:
