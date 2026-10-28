@@ -12,6 +12,7 @@ class FullCalendar(ui.element, component='fullcalendar.js'):
         options: dict[str, Any],
         on_click: Callable | None = None,
         on_change: Callable | None = None,
+        on_contextmenu: Callable | None = None,
     ) -> None:
         """FullCalendar
 
@@ -23,6 +24,8 @@ class FullCalendar(ui.element, component='fullcalendar.js'):
         :param on_change: callback that is called when an event is dragged or resized. `e.args` is
             `{"id", "kind": "move" | "resize", "edge": "start" | "end" | None, "start", "end"}` with local ISO times.
             The dragged position is reverted on the client, so the callback must update `events` to move it.
+        :param on_contextmenu: callback that is called when an event with `extendedProps.manual` is right-clicked.
+            `e.args` is `{"id", "x", "y"}` with the client position of the click.
         """
         super().__init__()
         self.add_resource(Path(__file__).parent / 'lib')
@@ -33,6 +36,8 @@ class FullCalendar(ui.element, component='fullcalendar.js'):
             self.on('click', lambda e: events.handle_event(on_click, e))
         if on_change:
             self.on('event_change', lambda e: events.handle_event(on_change, e))
+        if on_contextmenu:
+            self.on('event_contextmenu', lambda e: events.handle_event(on_contextmenu, e))
 
     def add_event(self, title: str, start: str, end: str, **kwargs) -> None:
         """Add an event to the calendar.

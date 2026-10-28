@@ -214,8 +214,8 @@ class LogView(DialogMixin):
                 lambda e, rid=record.id: self._on_row_click(rid, e),
                 args=["ctrlKey", "metaKey", "shiftKey"],
             )
-            # アイテムに設定されたカテゴリをバッジで表示する(未設定・削除済みアイテムは未定)
-            category = self._service.category_for_item(record.item_id)
+            # 記録のカテゴリをバッジで表示する(通常の記録はアイテムのカテゴリ。未設定・削除済みアイテムは未定)
+            category = self._service.category_for_record(record)
             category_name = category.name if category is not None else "未定"
             category_color = category.color if category is not None else "grey"
             # 左側(バッジ+タスク名)だけを縮められるようにし、長いタスク名は「...」で省略して
@@ -226,6 +226,8 @@ class LogView(DialogMixin):
                     "shrink-0 max-w-[7rem] truncate"
                 ):
                     ui.tooltip(category_name)
+                if record.manual:
+                    ui.badge("手動").props("color=red-2 text-color=red-10").classes("shrink-0")
                 with ui.label(record.item_name).classes("font-medium truncate min-w-0"):
                     ui.tooltip(record.item_name)
             with ui.row().classes("items-center gap-1 no-wrap shrink-0"):
