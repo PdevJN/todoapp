@@ -39,6 +39,7 @@ from todoapp.ui.link_template_dialog import LinkTemplateDialog
 from todoapp.ui.list_view import ListView
 from todoapp.ui.log_view import LogView
 from todoapp.ui.main_view import MainView
+from todoapp.ui.manual_record_dialog import ManualRecordDialog
 from todoapp.ui.record_edit_dialog import RecordEditDialog
 from todoapp.ui.record_timeline_dialog import RecordTimelineDialog
 from todoapp.ui.settings_dialog import SettingsDialog
@@ -288,9 +289,11 @@ def build_app_ui(
     record_timeline_dialog = RecordTimelineDialog(service, refresh_all=refresh_all)
     log_view = LogView(service, state, open_timeline_edit=record_timeline_dialog.open_for)
     record_edit_dialog = RecordEditDialog(service, refresh_all=refresh_all)
+    manual_record_dialog = ManualRecordDialog(service, refresh_all=refresh_all)
     calendar_view = CalendarView(
         service,
         open_record_edit_dialog=record_edit_dialog.open_for,
+        open_manual_record_dialog=manual_record_dialog.open_for,
         initial_week_start=config.week_start,
         on_week_start_change=_on_week_start_change,
         holidays=holidays,
@@ -302,6 +305,7 @@ def build_app_ui(
     edit_dialog.build()
     log_view.build()
     record_edit_dialog.build()
+    manual_record_dialog.build()
     record_timeline_dialog.build()
     calendar_view.build()
     category_list_dialog.build()

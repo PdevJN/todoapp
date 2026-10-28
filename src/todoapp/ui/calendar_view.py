@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
 from nicegui import ui
 from nicegui.events import GenericEventArguments, ValueChangeEventArguments
 
+from todoapp.domain.models import UNCATEGORIZED_NAME, is_category_expired
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import WeekStart
 from todoapp.ui.dialog_base import DialogMixin
@@ -14,7 +16,19 @@ from todoapp.ui.formatting import format_duration
 from todoapp.ui.vendor.fullcalendar.fullcalendar import FullCalendar
 
 _UNCATEGORIZED_COLOR = "#9e9e9e"
+# 手動追加の記録は、カテゴリ色ではなく薄い赤で他の記録と見分ける
+_MANUAL_COLORS = {"color": "#ef9a9a", "borderColor": "#c62828", "textColor": "#7f0000"}
 _WEEK_START_LABELS: dict[WeekStart, str] = {"sunday": "日曜始まり", "monday": "月曜始まり"}
+
+
+@dataclass(frozen=True)
+class CategoryMenuEntry:
+    """手動記録の右クリックメニューに並べる1行。"""
+
+    category_id: str | None
+    label: str
+    color: str
+    current: bool
 
 
 def _first_day(week_start: WeekStart) -> int:
@@ -26,6 +40,7 @@ class CalendarView(DialogMixin):
         self,
         service: TodoService,
         open_record_edit_dialog: Callable[[str], None],
+        open_manual_record_dialog: Callable[[date], None],
         initial_week_start: WeekStart,
         on_week_start_change: Callable[[WeekStart], None],
         holidays: dict[date, str],
@@ -33,6 +48,7 @@ class CalendarView(DialogMixin):
     ) -> None:
         self._service = service
         self._open_record_edit_dialog = open_record_edit_dialog
+        self._open_manual_record_dialog = open_manual_record_dialog
         self._week_start = initial_week_start
         self._on_week_start_change = on_week_start_change
         self._holidays = holidays
@@ -64,6 +80,9 @@ class CalendarView(DialogMixin):
             with ui.row().classes("w-full items-center justify-between"):
                 ui.label("実行履歴(カレンダー)").classes("text-lg font-bold")
                 with ui.row().classes("items-center gap-2"):
+                    ui.button(icon="add", on_click=self._on_add_click).props("flat dense round").tooltip(
+                        "実行記録を追加"
+                    )
                     ui.button(icon="event_available", on_click=self._on_refresh_holidays).props(
                         "flat dense round"
                     ).tooltip("祝日データを確認・更新")
@@ -97,7 +116,13 @@ class CalendarView(DialogMixin):
                         "events": [],
                     },
                     on_click=self._on_event_click,
+                    on_contextmenu=self._on_event_contextmenu,
                 ).classes("w-full")
+            # 手動記録の右クリックで、クリック位置にカテゴリ変更メニューを開く(中身は開くたびに作り直す)。
+            # QMenuは親要素を基準に開くため、クリック位置へ動かす大きさ0の固定要素を親にする
+            self._menu_anchor = ui.element("div").style("position: fixed; width: 0; height: 0")
+            with self._menu_anchor:
+                self._category_menu = ui.menu().props("no-parent-event")
             ui.button("閉じる", on_click=self.dialog.close).props("flat").classes("self-end")
 
     def open(self) -> None:
@@ -120,6 +145,9 @@ class CalendarView(DialogMixin):
         self._calendar.run_method("set_option", "firstDay", _first_day(self._week_start))
         self._on_week_start_change(self._week_start)
 
+    def _on_add_click(self) -> None:
+        self._open_manual_record_dialog(date.today())
+
     def _on_refresh_holidays(self) -> None:
         if self._refresh_holidays():
             ui.notify(f"祝日データを更新しました({len(self._holidays)}件)")
@@ -140,26 +168,62 @@ class CalendarView(DialogMixin):
         now = datetime.now()
         events: list[dict[str, Any]] = []
         for record in self._service.records:
-            category = self._service.category_for_item(record.item_id)
+            category = self._service.category_for_record(record)
             end = record.end_time or now
             start_label = record.start_time.strftime("%H:%M:%S")
             end_label = end.strftime("%H:%M:%S") if record.end_time else "実行中"
             elapsed_label = format_duration(record.elapsed_seconds(now))
-            events.append(
-                {
-                    "id": record.id,
-                    "title": record.item_name,
-                    "start": record.start_time.isoformat(),
-                    "end": end.isoformat(),
-                    "color": category.color if category is not None else _UNCATEGORIZED_COLOR,
-                    "extendedProps": {
-                        "tooltip": f"開始 {start_label} / 終了 {end_label} / 経過 {elapsed_label}",
-                    },
-                }
-            )
+            tooltip = f"開始 {start_label} / 終了 {end_label} / 経過 {elapsed_label}"
+            event: dict[str, Any] = {
+                "id": record.id,
+                "title": record.item_name,
+                "start": record.start_time.isoformat(),
+                "end": end.isoformat(),
+                "color": category.color if category is not None else _UNCATEGORIZED_COLOR,
+                "extendedProps": {"tooltip": tooltip, "manual": record.manual},
+            }
+            if record.manual:
+                event.update(_MANUAL_COLORS)
+                category_name = category.name if category is not None else "未定"
+                event["extendedProps"]["tooltip"] = f"手動追加 / カテゴリ {category_name} / {tooltip}"
+            events.append(event)
         return events
 
     def _on_event_click(self, e: GenericEventArguments) -> None:
         record_id = e.args.get("info", {}).get("event", {}).get("id")
         if record_id:
             self._open_record_edit_dialog(record_id)
+
+    def category_menu_entries(self, record_id: str) -> list[CategoryMenuEntry]:
+        """手動記録の右クリックメニューに並べる、`未定`+登録済みカテゴリ。通常の記録は空。"""
+        record = next((r for r in self._service.records if r.id == record_id), None)
+        if record is None or not record.manual:
+            return []
+        current = self._service.category_for_record(record)
+        entries = [CategoryMenuEntry(None, UNCATEGORIZED_NAME, _UNCATEGORIZED_COLOR, current is None)]
+        for category in self._service.categories:
+            label = f"❗️{category.name}" if is_category_expired(category, date.today()) else category.name
+            if category.prj_code:
+                label += f"({category.prj_code})"
+            entries.append(CategoryMenuEntry(category.id, label, category.color, current is category))
+        return entries
+
+    def _on_event_contextmenu(self, e: GenericEventArguments) -> None:
+        record_id = e.args.get("id")
+        entries = self.category_menu_entries(record_id) if record_id else []
+        if not entries:
+            return
+        self._category_menu.clear()
+        with self._category_menu:
+            ui.item_label("カテゴリを変更").props("header").classes("text-xs text-gray-500 px-3 pt-1")
+            for entry in entries:
+                with ui.menu_item(
+                    entry.label, on_click=lambda cid=entry.category_id: self._change_category(record_id, cid)
+                ).props("dense" + (" disable" if entry.current else "")):
+                    ui.icon("circle", color=entry.color).classes("text-xs")
+        self._menu_anchor.style(f"left: {e.args['x']}px; top: {e.args['y']}px")
+        self._category_menu.open()
+
+    def _change_category(self, record_id: str, category_id: str | None) -> None:
+        self._service.set_record_category(record_id, category_id)
+        self.refresh()

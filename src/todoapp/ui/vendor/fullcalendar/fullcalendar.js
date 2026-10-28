@@ -62,8 +62,15 @@ export default {
     this.options.eventDrop = (info) => emitChange(info, "move");
     this.options.eventResize = (info) => emitChange(info, "resize");
     this.options.eventDidMount = (info) => {
-      const tooltip = info.event.extendedProps && info.event.extendedProps.tooltip;
-      info.el.title = tooltip || info.event.title || "";
+      const props = info.event.extendedProps || {};
+      info.el.title = props.tooltip || info.event.title || "";
+      // 手動追加の記録だけ、右クリックでブラウザ標準のメニューを抑止し、クリック位置を通知する
+      if (props.manual) {
+        info.el.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          this.$emit("event_contextmenu", { id: info.event.id, x: event.clientX, y: event.clientY });
+        });
+      }
     };
   },
   methods: {

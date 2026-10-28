@@ -27,6 +27,7 @@ CATEGORY_NAME_MAX_LENGTH = 30
 CATEGORY_KIND_MAX_LENGTH = 20
 CATEGORY_PRJ_CODE_MAX_LENGTH = 20
 UNCATEGORIZED_NAME = "未定"
+MANUAL_ITEM_ID_PREFIX = "manual:"  # 手動記録の`item_id`の接頭辞(アイテムを持たない記録の合成キー)
 _PRJ_CODE_PATTERN = re.compile(r"[A-Za-z0-9_.\-]*")
 LINK_TEMPLATE_NAME_MAX_LENGTH = 30
 LINK_NAME_MAX_LENGTH = 30
@@ -138,6 +139,23 @@ def validate_item_name(name: str) -> str | None:
         return "アイテム名に制御文字は使えません"
     if len(name) > ITEM_NAME_MAX_LENGTH:
         return f"アイテム名は{ITEM_NAME_MAX_LENGTH}文字以内で入力してください"
+    return None
+
+
+def validate_manual_record(
+    name: str, start: datetime, end: datetime, others: Iterable[tuple[datetime, datetime]]
+) -> str | None:
+    """手動で追加する記録を検証する。`others`は同日の既存記録の区間(実行中は現在時刻まで)。"""
+    error = validate_item_name(name)
+    if error is not None:
+        return error
+    if end <= start:
+        return "終了時刻は開始時刻より後にしてください"
+    if start.date() != end.date():
+        return "0:00をまたぐ記録は追加できません"
+    for other_start, other_end in others:
+        if start < other_end and other_start < end:
+            return "同じ日の他の記録と時間が重なっています"
     return None
 
 
@@ -317,6 +335,8 @@ class ExecutionRecord:
     start_time: datetime
     end_time: datetime | None = None
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    manual: bool = False  # 手動で追加した記録(アイテムを持たない)
+    category_id: str | None = None  # 手動記録のカテゴリ。通常の記録はアイテムのカテゴリを使う
 
     @property
     def is_running(self) -> bool:
@@ -327,13 +347,17 @@ class ExecutionRecord:
         return (end - self.start_time).total_seconds()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "id": self.id,
             "item_id": self.item_id,
             "item_name": self.item_name,
             "start_time": self.start_time.isoformat(),
             "end_time": self.end_time.isoformat() if self.end_time else None,
         }
+        if self.manual:
+            data["manual"] = True
+            data["category_id"] = self.category_id
+        return data
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> ExecutionRecord:
@@ -344,6 +368,8 @@ class ExecutionRecord:
             item_name=data["item_name"],
             start_time=datetime.fromisoformat(data["start_time"]),
             end_time=datetime.fromisoformat(end_time) if end_time else None,
+            manual=bool(data.get("manual", False)),
+            category_id=data.get("category_id"),
         )
 
 

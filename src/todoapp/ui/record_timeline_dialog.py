@@ -113,7 +113,7 @@ class RecordTimelineDialog(DialogMixin):
                     "editable": False,
                 }
             )
-        category = self._service.category_for_item(record.item_id)
+        category = self._service.category_for_record(record)
         events.append(
             {
                 "id": record.id,

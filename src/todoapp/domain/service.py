@@ -8,6 +8,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Concatenate, NamedTuple, Protocol
 
 from todoapp.domain.models import (
+    MANUAL_ITEM_ID_PREFIX,
     REPEATING_SCHEDULES,
     UNCATEGORIZED_NAME,
     AppData,
@@ -594,6 +595,40 @@ class TodoService:
         self._data.records = [r for r in self._data.records if r.id not in ids]
         self._save()
 
+    def add_manual_record(
+        self, category_id: str | None, name: str, start: datetime, end: datetime
+    ) -> ExecutionRecord:
+        """アイテムを持たない記録を手動で追加する。名前が空ならカテゴリ名(未設定は`未定`)にする。
+
+        記録の編集はUndoの対象外なので`@undoable`は付けない。検証は画面側で行う。
+        """
+        category = self._find_category(category_id) if category_id is not None else None
+        record = ExecutionRecord(
+            item_id="",
+            item_name=name or (category.name if category is not None else UNCATEGORIZED_NAME),
+            start_time=start,
+            end_time=end,
+            manual=True,
+            category_id=category_id,
+        )
+        record.item_id = f"{MANUAL_ITEM_ID_PREFIX}{record.id}"
+        self._data.records.append(record)
+        self._save()
+        return record
+
+    def set_record_category(self, record_id: str, category_id: str | None) -> None:
+        """手動記録のカテゴリを変更する。名前がこれまでのカテゴリ名のままなら、新しいカテゴリ名へ揃える。"""
+        record = self._find_record(record_id)
+        if not record.manual:
+            raise ValueError("手動で追加した記録のみカテゴリを変更できます")
+        new_category = self._find_category(category_id) if category_id is not None else None
+        old_category = self.category_for_record(record)
+        old_name = old_category.name if old_category is not None else UNCATEGORIZED_NAME
+        if record.item_name == old_name:
+            record.item_name = new_category.name if new_category is not None else UNCATEGORIZED_NAME
+        record.category_id = category_id
+        self._save()
+
     def is_category_name_taken(self, name: str, exclude_id: str | None = None) -> bool:
         """同名のカテゴリ(または予約名「未定」)が既にあるか。編集中のカテゴリは`exclude_id`で除く。"""
         if name == UNCATEGORIZED_NAME:
@@ -695,6 +730,12 @@ class TodoService:
                 return category
         return None
 
+    def category_for_record(self, record: ExecutionRecord) -> Category | None:
+        """記録のカテゴリ。手動記録は記録自身の、通常の記録はアイテムのカテゴリ(未設定・削除済みはNone)。"""
+        if not record.manual:
+            return self.category_for_item(record.item_id)
+        return next((c for c in self._data.categories if c.id == record.category_id), None)
+
     def category_today_totals(self, today: date) -> dict[str | None, float]:
         now = self._clock()
         totals: dict[str | None, float] = {}
@@ -702,8 +743,11 @@ class TodoService:
         for record in self._data.records:
             if record.start_time.date() != today:
                 continue
-            item = items_by_id.get(record.item_id)
-            category_id = item.category_id if item is not None else None
+            if record.manual:
+                category_id = record.category_id
+            else:
+                item = items_by_id.get(record.item_id)
+                category_id = item.category_id if item is not None else None
             totals[category_id] = totals.get(category_id, 0.0) + record.elapsed_seconds(now)
         return totals
 
@@ -739,11 +783,12 @@ class TodoService:
         known_ids = {category.id for category in self._data.categories}
         items_by_id = {item.id: item for item in self._data.items}
         order, seconds_by_item, names = self._today_item_order(today)
+        manual_category_ids = {r.item_id: r.category_id for r in self.today_records(today) if r.manual}
 
         result: dict[str | None, list[tuple[str, float, bool]]] = {}
         for item_id in order:
             item = items_by_id.get(item_id)
-            category_id = item.category_id if item is not None else None
+            category_id = item.category_id if item is not None else manual_category_ids.get(item_id)
             key = category_id if category_id in known_ids else None
             name = item.name if item is not None else names[item_id]
             done = item is not None and is_done(item, today)

@@ -28,6 +28,7 @@ src/todoapp/
 │   ├── main_view.py             # メインパネル(一覧・完了状態の絞り込み・新規登録・テーマFAB・実行中フローティング表示)
 │   ├── list_view.py             # 編集一覧
 │   ├── log_view.py              # 作業ログ(実行順/カテゴリ別・日付切り替え)
+│   ├── manual_record_dialog.py  # 実行記録の手動追加フォーム(実行履歴カレンダーの+ボタン)
 │   ├── record_timeline_dialog.py # 作業ログの時間編集(日表示カレンダー上のドラッグ&ドロップ)
 │   ├── calendar_view.py         # 実行履歴のカレンダー表示(当日/週/月、FullCalendar)
 │   ├── vendor/fullcalendar/     # FullCalendarのベンダリング(NiceGUI公式exampleを元に、ドラッグ&ドロップの通知・祝日ツールチップ・密着ガイド線などを追加。`lib/ja.global.min.js`は日本語locale)
