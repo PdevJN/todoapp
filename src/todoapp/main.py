@@ -7,7 +7,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 from nicegui import app, ui
 from nicegui.events import ValueChangeEventArguments
 
@@ -96,7 +96,7 @@ def build_app_ui(
     def _refresh_holidays() -> bool:
         try:
             fetched = parse_holiday_csv(fetch_holiday_csv())
-        except (httpx.HTTPError, ValueError):
+        except (httpx2.HTTPError, ValueError):
             return False
         if not fetched:
             return False

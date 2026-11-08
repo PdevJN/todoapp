@@ -6,7 +6,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-import httpx
+import httpx2
 
 from todoapp.repository.safe_io import atomic_write_text
 
@@ -34,10 +34,10 @@ def parse_holiday_csv(raw: bytes) -> dict[date, str]:
 
 
 def fetch_holiday_csv(url: str = CAO_HOLIDAY_CSV_URL, timeout: float = 10.0) -> bytes:
-    # httpxはCA証明書にcertifiを既定で使うため、urllib+sslのように一部のPython実行環境
+    # httpx2はCA証明書にcertifiを既定で使うため、urllib+sslのように一部のPython実行環境
     # (uv管理のCPython等、OSのCA証明書ストアを参照できない環境)でのSSL検証エラーを
     # 意識する必要が無い
-    response = httpx.get(url, headers={"User-Agent": "todoapp/1.0"}, timeout=timeout)
+    response = httpx2.get(url, headers={"User-Agent": "todoapp/1.0"}, timeout=timeout)
     response.raise_for_status()
     return response.content
 

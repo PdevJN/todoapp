@@ -180,7 +180,7 @@ class WorkSummaryPanel:
             self._month_start = (base - timedelta(days=1)).replace(day=1)
         self.refresh()
 
-    def _on_period_change(self, _: ValueChangeEventArguments[str | None]) -> None:
+    def _on_period_change(self, _: ValueChangeEventArguments[str]) -> None:
         if self._suppress_events:
             return
         start = _parse_date(self._start_input.value)
