@@ -17,7 +17,7 @@
 - PR #52 `feature/nicegui-4`: NiceGUIを4.0.0へ、`httpx`を`httpx2`へ更新した(`develop`へマージ済み、pytest 861件パス・mypy strict通過、GUI確認はユーザーが実施済み)
   - `pyproject.toml`を`nicegui>=4.0.0`・`httpx2>=2.12.0`に変更。NiceGUI 4が`httpx2`に依存するため。`httpx`・`httpcore`は環境と`uv.lock`から削除済み。`import httpx2`へ置換したのは`main.py`・`repository/holiday_repository.py`・`test/repository/test_holiday_repository.py`
   - NiceGUI 4で`ui.input`の`on_change`の型が`ValueChangeEventArguments[str]`固定になったため、`main_view.py`・`log_view.py`・`work_summary_panel.py`の日付入力ハンドラの注釈を`[str | None]`から`[str]`へ修正(本体は`not e.value`で空判定しており挙動は不変)
-  - 祝日CSVの実取得(`httpx2`経由)はテストではモックのみ。実機での取得確認は未実施
+  - 祝日CSVの実取得(`httpx2`経由)は、テストではモックのみだが、ユーザーが実機で確認済み
 
 ## 直近の作業(2026-10-28)
 
