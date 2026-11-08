@@ -1,10 +1,24 @@
 # 作業状況メモ
 
-最終更新: 2026-10-25(faviconの設定をPR #50で`develop`へマージ済み。2026-10-24時点: 起動オプション`--mode`をPR #48で`develop`へマージ済み。2026-10-22時点: 新規登録の基準日修正をPR #39、Undo/RedoをPR #40、Undoの見送りMinor対応をPR #42、作業ログの日付切り替えをPR #44、稼働集計をPR #46で`develop`へマージ済み。それ以前は下記「直近の作業(2026-10-21)」以降を参照。`main`へのPRはユーザーの指示があるまで作らない)
+最終更新: 2026-11-09(NiceGUI 4.0.0・httpx2への更新をPR #52で`develop`へマージ済み。2026-10-28時点: 実行記録の手動追加をPR #51で`develop`へマージ済み。2026-10-25時点: faviconの設定をPR #50で`develop`へマージ済み。2026-10-24時点: 起動オプション`--mode`をPR #48で`develop`へマージ済み。2026-10-22時点: 新規登録の基準日修正をPR #39、Undo/RedoをPR #40、Undoの見送りMinor対応をPR #42、作業ログの日付切り替えをPR #44、稼働集計をPR #46で`develop`へマージ済み。それ以前は下記「直近の作業(2026-10-21)」以降を参照。`main`へのPRはユーザーの指示があるまで作らない)
 
 ## 現在のブランチ
 
 `develop`(`origin/develop`と同期・作業ツリーはクリーン)。featureブランチは残っていない(マージ済みのローカルブランチは削除済み)。
+
+## 直近の作業(2026-11-09)
+
+- PR #52 `feature/nicegui-4`: NiceGUIを4.0.0へ、`httpx`を`httpx2`へ更新した(`develop`へマージ済み、pytest 861件パス・mypy strict通過、GUI確認はユーザーが実施済み)
+  - `pyproject.toml`を`nicegui>=4.0.0`・`httpx2>=2.12.0`に変更。NiceGUI 4が`httpx2`に依存するため。`httpx`・`httpcore`は環境と`uv.lock`から削除済み。`import httpx2`へ置換したのは`main.py`・`repository/holiday_repository.py`・`test/repository/test_holiday_repository.py`
+  - NiceGUI 4で`ui.input`の`on_change`の型が`ValueChangeEventArguments[str]`固定になったため、`main_view.py`・`log_view.py`・`work_summary_panel.py`の日付入力ハンドラの注釈を`[str | None]`から`[str]`へ修正(本体は`not e.value`で空判定しており挙動は不変)
+  - 祝日CSVの実取得(`httpx2`経由)はテストではモックのみ。実機での取得確認は未実施
+
+## 直近の作業(2026-10-28)
+
+- PR #51 `feature/manual-record`: 実行履歴カレンダーの`+`ボタンから、アイテムを持たない記録を手動追加できるようにした(`develop`へマージ済み、pytest 861件パス、GUI確認はユーザーが実施済み)
+  - 薄い赤で表示、作業ログの`実行順`に`手動`の印、カテゴリ別・種別別・`アイテム別`・稼働集計に反映。手動記録の右クリックでカテゴリ変更。`ExecutionRecord.manual`・`category_id`を持ち、`item_id`は`manual:<記録ID>`の合成キー。カテゴリの解決は`TodoService.category_for_record()`に集約。追加・カテゴリ変更はUndo対象外
+  - 右クリックメニューは、QMenuの`show(evt)`に座標を渡しても位置が決まらないため、クリック位置へ動かす大きさ0の`position: fixed`要素を親にして`open()`する方式(`ui/calendar_view.py`)
+  - 範囲外: 手動記録の名前変更、複数日にまたがる記録、作業ログ画面からの追加。設計書・実装計画は`docs/superpowers/specs/`・`plans/`の`2026-10-28-manual-record`
 
 ## 直近の作業(2026-10-25)
 
