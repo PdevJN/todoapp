@@ -46,6 +46,20 @@ class MonthRow:
     in_progress: bool  # その月の集計範囲の最終日が今日より後
 
 
+@dataclass(frozen=True)
+class RecentMonthsStats:
+    """直近の月の平均・最大・最小。残業時間がマイナスの月は0として扱う。最大・最小が同値のときは古い月を採る。"""
+
+    months: list[MonthRow]
+    average_workday_count: float
+    average_actual_seconds: float
+    average_overtime_seconds: float  # マイナスの月は0として平均する
+    raw_average_overtime_seconds: float  # マイナスを含めた実際の平均(ツールチップ用)
+    has_negative: bool  # 残業時間がマイナスの月があるか
+    max_month: MonthRow  # 残業時間(マイナスは0)が最大の月
+    min_month: MonthRow  # 残業時間(マイナスは0)が最小の月
+
+
 def is_workday(day: date, overrides: Mapping[date, bool], holidays: Mapping[date, str]) -> bool:
     """稼働日か。上書きがあればその値、無ければ平日(月〜金)かつ祝日でない日。"""
     if day in overrides:
@@ -138,3 +152,34 @@ def monthly_breakdown(summary: WorkSummary) -> list[MonthRow]:
 def overtime_exceeds_target(overtime_seconds: float, target_hours: float) -> bool:
     """残業時間が目標を上回ったか(秒に丸めて比べ、ちょうどは上回りにしない)。"""
     return round(overtime_seconds) > round(target_hours * 3600)
+
+
+def recent_complete_months(base: date, count: int = 3) -> list[tuple[int, int]]:
+    """`base`が属する月より前の直近`count`か月の(年, 月)を古い順に返す(`base`の月は含めない)。"""
+    index = base.year * 12 + (base.month - 1)
+    result = []
+    for offset in range(count, 0, -1):
+        year, month_index = divmod(index - offset, 12)
+        result.append((year, month_index + 1))
+    return result
+
+
+def recent_months_stats(months: list[MonthRow]) -> RecentMonthsStats | None:
+    """月ごとの行から、稼働日数・実績・残業時間の平均と、残業時間の最大・最小の月を求める。"""
+    if not months:
+        return None
+    count = len(months)
+
+    def clamped(month: MonthRow) -> float:
+        return max(month.overtime_seconds, 0.0)
+
+    return RecentMonthsStats(
+        months=months,
+        average_workday_count=sum(m.workday_count for m in months) / count,
+        average_actual_seconds=sum(m.actual_seconds for m in months) / count,
+        average_overtime_seconds=sum(clamped(m) for m in months) / count,
+        raw_average_overtime_seconds=sum(m.overtime_seconds for m in months) / count,
+        has_negative=any(m.overtime_seconds < 0 for m in months),
+        max_month=max(months, key=clamped),
+        min_month=min(months, key=clamped),
+    )

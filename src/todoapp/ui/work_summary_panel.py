@@ -10,10 +10,13 @@ from nicegui.events import ValueChangeEventArguments
 from todoapp.domain.service import TodoService
 from todoapp.domain.work_summary import (
     WorkDayRow,
+    MonthRow,
     WorkSummary,
     month_bounds,
     monthly_breakdown,
     overtime_exceeds_target,
+    recent_complete_months,
+    recent_months_stats,
     validate_period,
 )
 from todoapp.ui.formatting import WEEKDAY_LABELS, format_hhmm, format_signed_hhmm
@@ -125,6 +128,7 @@ class WorkSummaryPanel:
                 self._chart_empty_label = ui.label("この期間の記録はありません").classes("text-gray-400 italic")
             self._summary_container = ui.column().classes("w-full gap-0")
             self._breakdown_container = ui.column().classes("w-full gap-0")
+            self._recent_container = ui.column().classes("w-full gap-0")
             with ui.expansion("稼働日を選ぶ").classes("w-full"):
                 self._calendar_container = ui.column().classes("w-full gap-2")
         self._built = True
@@ -157,6 +161,7 @@ class WorkSummaryPanel:
         summary = self._service.work_summary(start, end, self._holidays, self._get_standard_work_hours())
         self._render_summary(summary)
         self._render_breakdown(summary)
+        self._render_recent_months(end)
         self._update_chart(summary)
         self._render_calendar(summary)
 
@@ -260,6 +265,71 @@ class WorkSummaryPanel:
                 bold=True,
             )
             total_label.mark("work-month-total")
+
+    def _render_recent_months(self, base: date) -> None:
+        """`base`(表示中の月の末日、または期間の終了日)が属する月より前の直近3か月の稼働日数・実績・残業時間と、平均・最大・最小を表示する。"""
+        months = recent_complete_months(base)
+        start = month_bounds(*months[0])[0]
+        end = month_bounds(*months[-1])[1]
+        summary = self._service.work_summary(start, end, self._holidays, self._get_standard_work_hours())
+        stats = recent_months_stats(monthly_breakdown(summary))
+        target_hours = self._get_overtime_target_hours()
+
+        def color(seconds: float) -> str:
+            return _OVER_CLASS if overtime_exceeds_target(seconds, target_hours) else _UNDER_CLASS
+
+        def overtime_text(seconds: float) -> str:
+            return format_signed_hhmm(max(seconds, 0.0))  # マイナスは0として表示する
+
+        def month_cells(name: str, month: MonthRow) -> tuple[str, str, str, str, str]:
+            return (
+                name,
+                f"{month.workday_count}日",
+                format_hhmm(month.total_seconds),
+                format_hhmm(month.actual_seconds),
+                overtime_text(month.overtime_seconds),
+            )
+
+        def month_row(name: str, month: MonthRow, marker: str, *, bold: bool = False) -> None:
+            label = self._breakdown_row(
+                month_cells(name, month),
+                color_class=color(max(month.overtime_seconds, 0.0)),
+                bold=bold,
+            )
+            label.mark(marker)
+            if month.overtime_seconds < 0:  # 0として表示した実際の値はマウスオーバーで確認できる
+                with label:
+                    ui.tooltip(f"実際の値 {format_signed_hhmm(month.overtime_seconds)}")
+
+        self._recent_container.clear()
+        if stats is None:
+            return
+        with self._recent_container:
+            ui.label("直近3か月の稼働").classes("text-sm font-bold text-gray-600 mt-2")
+            self._breakdown_row(("月", "稼働日数", "合計", "実績", "残業時間"), header=True)
+            for month in stats.months:
+                name = f"{month.year}年{month.month}月" + ("(途中)" if month.in_progress else "")
+                month_row(name, month, f"recent-month-{month.year}-{month.month:02d}")
+            average = self._breakdown_row(
+                (
+                    "平均",
+                    f"{stats.average_workday_count:.1f}日",
+                    "-",
+                    format_hhmm(stats.average_actual_seconds),
+                    format_signed_hhmm(stats.average_overtime_seconds),
+                ),
+                color_class=color(stats.average_overtime_seconds),
+                bold=True,
+            )
+            average.mark("recent-avg")
+            if stats.has_negative:
+                with average:
+                    ui.tooltip(
+                        "マイナスの月を0として平均。"
+                        f"マイナスを含めた実際の平均 {format_signed_hhmm(stats.raw_average_overtime_seconds)}"
+                    )
+            month_row(f"最大({stats.max_month.month}月)", stats.max_month, "recent-max", bold=True)
+            month_row(f"最小({stats.min_month.month}月)", stats.min_month, "recent-min", bold=True)
 
     @staticmethod
     def _breakdown_row(
