@@ -3,7 +3,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from todoapp.repository.holiday_repository import HolidayRepository, fetch_holiday_csv, parse_holiday_csv
@@ -80,21 +80,21 @@ def test_parse_holiday_csv_skips_rows_with_missing_date_or_name() -> None:
 def test_fetch_holiday_csv_returns_response_body_and_sends_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict[str, Any] = {}
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
+    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> httpx2.Response:
         calls.update(url=url, headers=headers, timeout=timeout)
-        return httpx.Response(200, content=b"body", request=httpx.Request("GET", url))
+        return httpx2.Response(200, content=b"body", request=httpx2.Request("GET", url))
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx2, "get", fake_get)
 
     assert fetch_holiday_csv("https://example.test/h.csv", timeout=3.0) == b"body"
     assert calls == {"url": "https://example.test/h.csv", "headers": {"User-Agent": "todoapp/1.0"}, "timeout": 3.0}
 
 
 def test_fetch_holiday_csv_raises_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
-        return httpx.Response(500, request=httpx.Request("GET", url))
+    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> httpx2.Response:
+        return httpx2.Response(500, request=httpx2.Request("GET", url))
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx2, "get", fake_get)
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(httpx2.HTTPStatusError):
         fetch_holiday_csv("https://example.test/h.csv")

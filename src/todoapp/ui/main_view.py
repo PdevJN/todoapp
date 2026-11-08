@@ -236,7 +236,7 @@ class MainView:
     def shift_view_date(self, days: int) -> None:
         self._date_input.value = (self._state.view_date + timedelta(days=days)).isoformat()
 
-    def _on_view_date_change(self, e: ValueChangeEventArguments[str | None]) -> None:
+    def _on_view_date_change(self, e: ValueChangeEventArguments[str]) -> None:
         if not e.value:
             return
         self._state.view_date = date.fromisoformat(e.value)
