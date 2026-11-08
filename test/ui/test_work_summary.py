@@ -216,3 +216,46 @@ async def test_chart_is_hidden_until_the_toggle_button_is_pressed(app_user: User
     app_user.find(marker="summary-chart-toggle").click()
 
     assert is_displayed(chart)
+
+
+async def test_recent_months_table_shows_rows_average_max_min(app_user: User, app_env: AppEnv) -> None:
+    from todoapp.domain.work_summary import recent_complete_months
+    from todoapp.ui.formatting import format_signed_hhmm
+
+    months = recent_complete_months(date.today())
+    (year, month) = months[-1]
+    first, last = month_bounds(year, month)
+    days = [first + timedelta(days=n) for n in range((last - first).days + 1)]
+    weekdays = [d for d in days if d.weekday() < 5]  # テストでは祝日データが無いので平日=稼働日
+    item = make_item("設計", ScheduleType.ONE_TIME)
+    app_env.seed(items=[item], records=[make_record(item, _at(weekdays[0], 8), _at(weekdays[0], 18))])  # 10時間
+
+    await app_user.open("/")
+    await press(app_user, "T", shift=True)
+    select_tab(app_user, "稼働集計")
+
+    await shows(app_user, "直近3か月の稼働")
+    actual_overtime = 10 * 3600 - len(weekdays) * 8 * 3600  # 稼働日分の標準労働時間に届かずマイナス
+    assert actual_overtime < 0
+    [last_overtime] = _marked(app_user, f"recent-month-{year}-{month:02d}")
+    assert last_overtime.text == "00:00"  # マイナスは0として表示する
+    tooltips = [c for c in last_overtime.default_slot.children if isinstance(c, ui.tooltip)]
+    assert [t.text for t in tooltips] == [f"実際の値 {format_signed_hhmm(actual_overtime)}"]
+    for marker in ("recent-avg", "recent-max", "recent-min"):
+        assert len(_marked(app_user, marker)) == 1
+    [maximum] = _marked(app_user, "recent-max")
+    assert maximum.text == "00:00"  # 全月がマイナス(0扱い)なので、最大は同値の古い月
+
+
+async def test_recent_months_follow_the_displayed_month(app_user: User, app_env: AppEnv) -> None:
+    await _open_period(app_user, date(2026, 9, 7), date(2026, 9, 20))  # 終了日は9月 -> 6〜8月
+
+    assert _marked(app_user, "recent-month-2026-06")
+    assert _marked(app_user, "recent-month-2026-08")
+    assert not _marked(app_user, "recent-month-2026-09")
+
+    set_value(app_user, "work-end", "2026-11-03")  # 終了日が11月 -> 8〜10月
+    set_value(app_user, "work-start", "2026-10-01")
+
+    assert _marked(app_user, "recent-month-2026-10")
+    assert not _marked(app_user, "recent-month-2026-06")

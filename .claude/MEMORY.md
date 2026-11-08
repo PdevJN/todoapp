@@ -1,12 +1,18 @@
 # 作業状況メモ
 
-最終更新: 2026-11-09(NiceGUI 4.0.0・httpx2への更新をPR #52で`develop`へマージ済み。2026-10-28時点: 実行記録の手動追加をPR #51で`develop`へマージ済み。2026-10-25時点: faviconの設定をPR #50で`develop`へマージ済み。2026-10-24時点: 起動オプション`--mode`をPR #48で`develop`へマージ済み。2026-10-22時点: 新規登録の基準日修正をPR #39、Undo/RedoをPR #40、Undoの見送りMinor対応をPR #42、作業ログの日付切り替えをPR #44、稼働集計をPR #46で`develop`へマージ済み。それ以前は下記「直近の作業(2026-10-21)」以降を参照。`main`へのPRはユーザーの指示があるまで作らない)
+最終更新: 2026-11-09(`稼働集計`の直近3か月の表を追加(PR #54)。NiceGUI 4.0.0・httpx2への更新をPR #52で`develop`へマージ済み。2026-10-28時点: 実行記録の手動追加をPR #51で`develop`へマージ済み。2026-10-25時点: faviconの設定をPR #50で`develop`へマージ済み。2026-10-24時点: 起動オプション`--mode`をPR #48で`develop`へマージ済み。2026-10-22時点: 新規登録の基準日修正をPR #39、Undo/RedoをPR #40、Undoの見送りMinor対応をPR #42、作業ログの日付切り替えをPR #44、稼働集計をPR #46で`develop`へマージ済み。それ以前は下記「直近の作業(2026-10-21)」以降を参照。`main`へのPRはユーザーの指示があるまで作らない)
 
 ## 現在のブランチ
 
 `develop`(`origin/develop`と同期・作業ツリーはクリーン)。featureブランチは残っていない(マージ済みのローカルブランチは削除済み)。
 
 ## 直近の作業(2026-11-09)
+
+- PR #54 `feature/recent-months-summary`: `稼働集計`タブに`直近3か月の稼働`の表を追加した(`develop`へマージ済み、pytest 871件パス・mypy通過、GUI確認はユーザーが実施済み)
+  - 基準は表示中の月(`月`表示)または`期間`の終了日で、その月より前の3か月(基準の月は含めない)。表示を切り替えると連動する。月ごとの稼働日数・合計・実績・残業時間と、`平均`・`最大`・`最小`の行。`domain/work_summary.py`の`recent_complete_months()`・`recent_months_stats()`、`ui/work_summary_panel.py`の`_render_recent_months()`
+  - 残業時間がマイナスの月は`00:00`表示にしてマウスオーバーで実際の値を出す。`平均`・`最大`・`最小`も0として計算(同値は古い月)。上部の数字・月別の内訳・通算は従来どおりマイナス表示
+  - 基準が今日を含む月以降になると`(途中)`付きの過不足時間になる。仕様は`CLAUDE.md`の「稼働集計」に記載
+  - 確認用のテストデータは、`HOME`を差し替えたコピー(`~/.todoapp`のコピー)に8〜10月の記録を足して起動した(実データは触らない)。作業用コピーは削除済み
 
 - PR #52 `feature/nicegui-4`: NiceGUIを4.0.0へ、`httpx`を`httpx2`へ更新した(`develop`へマージ済み、pytest 861件パス・mypy strict通過、GUI確認はユーザーが実施済み)
   - `pyproject.toml`を`nicegui>=4.0.0`・`httpx2>=2.12.0`に変更。NiceGUI 4が`httpx2`に依存するため。`httpx`・`httpcore`は環境と`uv.lock`から削除済み。`import httpx2`へ置換したのは`main.py`・`repository/holiday_repository.py`・`test/repository/test_holiday_repository.py`

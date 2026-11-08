@@ -5,12 +5,15 @@ import pytest
 
 from todoapp.domain.work_summary import (
     MAX_PERIOD_DAYS,
+    MonthRow,
     WorkSummary,
     build_work_summary,
     is_workday,
     month_bounds,
     monthly_breakdown,
     overtime_exceeds_target,
+    recent_complete_months,
+    recent_months_stats,
     validate_period,
 )
 
@@ -170,3 +173,79 @@ def test_monthly_breakdown_in_progress_month_does_not_subtract_future_workdays()
 
     assert row.workday_count == 22  # 祝日データなしの10月の平日
     assert row.overtime_seconds == 600 - 16 * STANDARD  # 10/1〜10/22の稼働日は16日
+
+
+# ---- 直近の終わった3か月 ----
+
+
+def test_recent_complete_months_excludes_base_month() -> None:
+    assert recent_complete_months(date(2026, 11, 9)) == [(2026, 8), (2026, 9), (2026, 10)]
+
+
+def test_recent_complete_months_follows_base_date() -> None:
+    assert recent_complete_months(date(2026, 9, 30)) == [(2026, 6), (2026, 7), (2026, 8)]
+
+
+def test_recent_complete_months_crosses_year_boundary() -> None:
+    assert recent_complete_months(date(2026, 1, 1)) == [(2025, 10), (2025, 11), (2025, 12)]
+    assert recent_complete_months(date(2026, 2, 28)) == [(2025, 11), (2025, 12), (2026, 1)]
+
+
+def _month_rows(today: date, actuals: dict[date, float]) -> list[MonthRow]:
+    (first_y, first_m), (last_y, last_m) = (m := recent_complete_months(today))[0], m[-1]
+    start, end = month_bounds(first_y, first_m)[0], month_bounds(last_y, last_m)[1]
+    return monthly_breakdown(_build(start, end, today, actuals=actuals))
+
+
+def test_recent_months_stats_average_max_min() -> None:
+    today = date(2026, 11, 9)
+    # 8月=21稼働日(168h)、9月=21稼働日(祝日なし)、10月=22稼働日(176h)を基準に、実績で残業を作る
+    months = _month_rows(
+        today,
+        {date(2026, 8, 3): 168 * 3600 + 3 * 3600, date(2026, 9, 1): 160 * 3600, date(2026, 10, 1): 176 * 3600 + 9 * 3600},
+    )
+    stats = recent_months_stats(months)
+    assert stats is not None
+    overtimes = [m.overtime_seconds for m in months]
+    assert stats.raw_average_overtime_seconds == pytest.approx(sum(overtimes) / 3)
+    assert stats.average_overtime_seconds == pytest.approx(sum(max(o, 0.0) for o in overtimes) / 3)
+    assert (stats.max_month.year, stats.max_month.month) == (2026, 10)
+    assert (stats.min_month.year, stats.min_month.month) == (2026, 9)
+    assert stats.average_workday_count == pytest.approx(sum(m.workday_count for m in months) / 3)
+    assert stats.average_actual_seconds == pytest.approx(sum(m.actual_seconds for m in months) / 3)
+
+
+def test_recent_months_stats_ties_pick_earliest_month() -> None:
+    def month(m: int) -> MonthRow:
+        return MonthRow(2026, m, 20, 20 * STANDARD, 20 * STANDARD, 0.0, False)
+
+    stats = recent_months_stats([month(8), month(9), month(10)])
+    assert stats is not None
+    assert stats.max_month.month == 8
+    assert stats.min_month.month == 8
+    assert stats.average_overtime_seconds == 0.0
+
+
+def test_recent_months_stats_empty_is_none() -> None:
+    assert recent_months_stats([]) is None
+
+
+def _month(m: int, overtime: float) -> MonthRow:
+    return MonthRow(2026, m, 20, 20 * STANDARD, 20 * STANDARD + overtime, overtime, False)
+
+
+def test_recent_months_stats_treat_negative_overtime_as_zero() -> None:
+    stats = recent_months_stats([_month(8, -3600.0), _month(9, 7200.0), _month(10, -7200.0)])
+    assert stats is not None
+    assert stats.average_overtime_seconds == pytest.approx(7200.0 / 3)  # (0 + 7200 + 0) / 3
+    assert stats.raw_average_overtime_seconds == pytest.approx(-3600.0 / 3)  # マイナスを含めた実際の平均
+    assert stats.max_month.month == 9
+    assert stats.min_month.month == 8  # 0同士(8月・10月)は古い月
+    assert stats.has_negative
+
+
+def test_recent_months_stats_without_negative_has_no_flag() -> None:
+    stats = recent_months_stats([_month(8, 0.0), _month(9, 3600.0), _month(10, 7200.0)])
+    assert stats is not None
+    assert not stats.has_negative
+    assert stats.average_overtime_seconds == pytest.approx(stats.raw_average_overtime_seconds)
