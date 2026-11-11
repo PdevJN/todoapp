@@ -33,9 +33,11 @@ class CategoryPickDialog(DialogMixin):
     def _render(self) -> None:
         self.category_container.clear()
         with self.category_container:
-            if not self._service.categories:
-                ui.label("カテゴリがまだありません").classes("text-gray-400 italic")
-            for category in self._service.categories:
+            # 有効期限が切れたカテゴリは、新しく割り当てる対象から外す
+            categories = self._service.selectable_categories()
+            if not categories:
+                ui.label("選べるカテゴリがまだありません").classes("text-gray-400 italic")
+            for category in categories:
                 row = ui.label(category.name).classes(
                     f"w-full px-3 py-1 rounded cursor-pointer text-white bg-{category.color}"
                 )

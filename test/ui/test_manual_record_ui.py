@@ -83,13 +83,27 @@ def test_category_menu_entries_list_uncategorized_then_categories(tmp_path: Path
 
 def test_category_menu_entries_show_prj_code_and_expired_mark(tmp_path: Path) -> None:
     view, service = _view(tmp_path)
-    service.add_category("案件", expiry_date=date(2000, 1, 1))
-    service.categories[0].prj_code = "P-1"
-    record = service.add_manual_record(None, "", datetime(2026, 8, 30, 9), datetime(2026, 8, 30, 10))
+    expired = service.add_category("案件", expiry_date=date(2000, 1, 1))
+    expired.prj_code = "P-1"
+    # 期限切れのカテゴリは、現在の割り当てとして残っている場合だけメニューに出る
+    record = service.add_manual_record(expired.id, "", datetime(2026, 8, 30, 9), datetime(2026, 8, 30, 10))
 
     entries = view.category_menu_entries(record.id)
 
     assert entries[1].label == "❗️案件(P-1)"
+    assert entries[1].tooltip == "有効期限切れ(2000-01-01)"
+    assert entries[1].current
+
+
+def test_category_menu_entries_hide_expired_category_that_is_not_current(tmp_path: Path) -> None:
+    view, service = _view(tmp_path)
+    work = service.add_category("仕事")
+    service.add_category("案件", expiry_date=date(2000, 1, 1))
+    record = service.add_manual_record(work.id, "", datetime(2026, 8, 30, 9), datetime(2026, 8, 30, 10))
+
+    entries = view.category_menu_entries(record.id)
+
+    assert [e.label for e in entries] == ["未定", "仕事"]
 
 
 def test_category_menu_entries_empty_for_normal_record(tmp_path: Path) -> None:

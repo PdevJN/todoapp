@@ -8,7 +8,7 @@ from typing import Any
 from nicegui import ui
 from nicegui.events import GenericEventArguments, ValueChangeEventArguments
 
-from todoapp.domain.models import UNCATEGORIZED_NAME, is_category_expired
+from todoapp.domain.models import UNCATEGORIZED_NAME, expired_category_tooltip, is_category_expired
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import WeekStart
 from todoapp.ui.dialog_base import DialogMixin
@@ -29,6 +29,7 @@ class CategoryMenuEntry:
     label: str
     color: str
     current: bool
+    tooltip: str = ""
 
 
 def _first_day(week_start: WeekStart) -> int:
@@ -201,11 +202,14 @@ class CalendarView(DialogMixin):
             return []
         current = self._service.category_for_record(record)
         entries = [CategoryMenuEntry(None, UNCATEGORIZED_NAME, _UNCATEGORIZED_COLOR, current is None)]
-        for category in self._service.categories:
-            label = f"❗️{category.name}" if is_category_expired(category, date.today()) else category.name
+        # 有効期限が切れたカテゴリは、現在の割り当て以外は出さない
+        for category in self._service.selectable_categories(keep_id=record.category_id):
+            expired = is_category_expired(category, date.today())
+            label = f"❗️{category.name}" if expired else category.name
             if category.prj_code:
                 label += f"({category.prj_code})"
-            entries.append(CategoryMenuEntry(category.id, label, category.color, current is category))
+            tooltip = expired_category_tooltip(category) if expired else ""
+            entries.append(CategoryMenuEntry(category.id, label, category.color, current is category, tooltip))
         return entries
 
     def _on_event_contextmenu(self, e: GenericEventArguments) -> None:
@@ -221,6 +225,8 @@ class CalendarView(DialogMixin):
                     entry.label, on_click=lambda cid=entry.category_id: self._change_category(record_id, cid)
                 ).props("dense" + (" disable" if entry.current else "")):
                     ui.icon("circle", color=entry.color).classes("text-xs")
+                    if entry.tooltip:
+                        ui.tooltip(entry.tooltip)
         self._menu_anchor.style(f"left: {e.args['x']}px; top: {e.args['y']}px")
         self._category_menu.open()
 

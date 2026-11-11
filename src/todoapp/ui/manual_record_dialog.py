@@ -50,7 +50,7 @@ class ManualRecordDialog(DialogMixin):
     def open_for(self, day: date) -> None:
         """`day`を日付の初期値にしてフォームを開く。"""
         options: dict[str, str] = {"": UNCATEGORIZED_NAME}
-        for category in self._service.categories:
+        for category in self._service.selectable_categories():
             label = f"{category.name}({category.prj_code})" if category.prj_code else category.name
             options[category.id] = label
         self._category_select.set_options(options, value="")

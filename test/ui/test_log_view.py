@@ -177,6 +177,47 @@ async def test_log_shows_item_category_badge_and_uncategorized_for_deleted_item(
     assert badges == {"開発", "未定"}
 
 
+async def test_order_mode_shows_expired_category_with_mark_and_tooltip(app_user: User, app_env: AppEnv) -> None:
+    # 実行順は記録をそのまま表示し、期限切れのカテゴリには❗️とチップを付ける
+    old = Category(name="旧案件", expiry_date=date(2000, 1, 1))
+    item = _done_item("設計", category_id=old.id)
+    app_env.seed(items=[item], categories=[old], records=[make_record(item, _at(9), _at(10))])
+
+    await _open_log(app_user)
+
+    badges = {e.text for e in app_user.find(kind=ui.badge).elements if is_displayed(e)}
+    assert badges == {"❗️旧案件"}
+    tooltips = {e.text for e in app_user.find(kind=ui.tooltip).elements}
+    assert "旧案件 — 有効期限切れ(2000-01-01)" in tooltips
+
+
+async def test_category_mode_hides_expired_category_without_records(app_user: User, app_env: AppEnv) -> None:
+    work = Category(name="開発")
+    old = Category(name="旧案件", expiry_date=date(2000, 1, 1))
+    item = _done_item("設計", category_id=work.id)
+    app_env.seed(items=[item], categories=[work, old], records=[make_record(item, _at(9), _at(10))])
+    await _open_log(app_user)
+
+    select_toggle(app_user, "カテゴリ別")
+
+    await shows(app_user, "開発")
+    await hides(app_user, "旧案件")
+    await hides(app_user, "❗️旧案件")
+
+
+async def test_category_mode_shows_expired_category_with_records_and_mark(app_user: User, app_env: AppEnv) -> None:
+    old = Category(name="旧案件", expiry_date=date(2000, 1, 1))
+    item = _done_item("設計", category_id=old.id)
+    app_env.seed(items=[item], categories=[old], records=[make_record(item, _at(9), _at(10, 30))])
+    await _open_log(app_user)
+
+    select_toggle(app_user, "カテゴリ別")
+
+    await shows(app_user, "❗️旧案件")
+    await shows(app_user, "01:30:00")
+    await shows(app_user, "有効期限切れ(2000-01-01)")  # ツールチップの中の文言
+
+
 async def test_calendar_button_is_disabled_only_for_running_record(app_user: User, app_env: AppEnv) -> None:
     done = _done_item("終了済み")
     running = _done_item("実行中")

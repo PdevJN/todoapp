@@ -124,7 +124,7 @@ class EditDialog(DialogMixin):
         self._today_estimate_minutes_input.value = today_minutes
         category_options: dict[str | None, str] = {None: _category_label("未定")}
         category_options.update(
-            {c.id: _category_label(c.name, c.prj_code, c.kind, c.color) for c in self._service.categories}
+            {c.id: _category_label(c.name, c.prj_code, c.kind, c.color) for c in self._service.selectable_categories(keep_id=item.category_id)}
         )
         self._category_select.set_options(category_options, value=item.category_id)
         self._link_editor.load(item.links, self._service.link_templates)
