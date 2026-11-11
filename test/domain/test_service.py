@@ -650,6 +650,69 @@ def test_category_today_all_totals_includes_categories_without_records() -> None
     assert totals == [(work, 600), (sales, 0), (None, 0)]
 
 
+def test_category_today_all_totals_hides_expired_category_without_records() -> None:
+    # 有効期限が切れたカテゴリは、その日に1度も実行されていなければ集計に出さない
+    service, _, _ = _service()
+    work = service.add_category("仕事")
+    service.add_category("旧案件", expiry_date=date(2026, 8, 29))
+
+    totals = service.category_today_all_totals(date(2026, 8, 30))
+
+    assert totals == [(work, 0), (None, 0)]
+
+
+def test_category_today_all_totals_shows_expired_category_with_records() -> None:
+    service, _, clock = _service()
+    old = service.add_category("旧案件", expiry_date=date(2026, 8, 29))
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item.id, old.id)
+
+    service.start(item.id)
+    clock.advance(600)
+    service.stop_running()
+
+    assert service.category_today_all_totals(date(2026, 8, 30)) == [(old, 600), (None, 0)]
+
+
+def test_category_today_all_totals_hides_expired_category_on_a_day_without_its_records() -> None:
+    # 記録のある日(8/30)には出て、記録の無い別の日(8/29)には出ない
+    service, _, clock = _service()
+    old = service.add_category("旧案件", expiry_date=date(2026, 8, 29))
+    item = service.add_item("A", ScheduleType.DAILY, date(2026, 8, 30))
+    service.set_item_category(item.id, old.id)
+    service.start(item.id)
+    clock.advance(60)
+    service.stop_running()
+
+    assert service.category_today_all_totals(date(2026, 8, 29)) == [(None, 0)]
+
+
+def test_category_today_all_totals_keeps_category_on_its_expiry_date() -> None:
+    # 有効期限日当日はまだ期限切れではないため、記録が無くても出す
+    service, _, _ = _service()
+    last_day = service.add_category("終了日", expiry_date=date(2026, 8, 30))
+
+    assert service.category_today_all_totals(date(2026, 8, 30)) == [(last_day, 0), (None, 0)]
+
+
+def test_selectable_categories_excludes_expired_categories() -> None:
+    service, _, _ = _service()
+    work = service.add_category("仕事")
+    service.add_category("旧案件", expiry_date=date(2026, 8, 29))
+    last_day = service.add_category("終了日", expiry_date=date(2026, 8, 30))
+
+    assert service.selectable_categories() == [work, last_day]
+
+
+def test_selectable_categories_keeps_the_given_expired_category() -> None:
+    # 現在割り当て済みのカテゴリは、期限切れでも残す(保存時に未定へ変わってしまうのを防ぐ)
+    service, _, _ = _service()
+    work = service.add_category("仕事")
+    old = service.add_category("旧案件", expiry_date=date(2026, 8, 29))
+
+    assert service.selectable_categories(keep_id=old.id) == [work, old]
+
+
 def test_category_today_all_totals_puts_uncategorized_last() -> None:
     service, _, clock = _service()
     work = service.add_category("仕事")

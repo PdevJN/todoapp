@@ -8,7 +8,7 @@ from nicegui.elements.dark_mode import DarkMode
 from nicegui.elements.fab import FabAction
 from nicegui.events import GenericEventArguments, SortableEventArguments, ValueChangeEventArguments
 
-from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, DoneFilter, ScheduleType, TodoItem, is_category_expired, is_done, is_skipped, matches_done_filter, today_estimate_seconds, validate_item_name
+from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, DoneFilter, ScheduleType, TodoItem, expired_category_tooltip, is_category_expired, is_done, is_skipped, matches_done_filter, today_estimate_seconds, validate_item_name
 from todoapp.domain.service import TodoService
 from todoapp.repository.config_repository import Theme
 from todoapp.ui.app_state import AppState
@@ -385,7 +385,9 @@ class MainView:
             expired_mark = "❗️" if category is not None and is_category_expired(category, today) else ""
             category_label = f"{expired_mark}{category.name}" if category is not None else "未定"
             category_color = category.color if category is not None else "grey"
-            ui.badge(category_label).props(f"outline color={category_color}")
+            with ui.badge(category_label).props(f"outline color={category_color}"):
+                if expired_mark and category is not None:
+                    ui.tooltip(expired_category_tooltip(category))
             skipped = is_skipped(item, view_date)
             name_classes = "font-medium"
             if is_done(item, view_date):

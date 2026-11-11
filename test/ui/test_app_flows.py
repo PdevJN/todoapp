@@ -320,6 +320,19 @@ async def test_shift_enter_registers_item_and_opens_category_picker(app_user: Us
     await shows(app_user, "カテゴリを選択")
 
 
+async def test_category_picker_hides_expired_categories(app_user: User, app_env: AppEnv) -> None:
+    app_env.seed(
+        categories=[Category(name="開発"), Category(name="旧案件", expiry_date=date(2000, 1, 1))],
+    )
+    await app_user.open("/")
+
+    app_user.find(content="新しいアイテム").type("分類したい").trigger("keydown.enter.shift")
+
+    await shows(app_user, "カテゴリを選択")
+    await shows(app_user, "開発")
+    await hides(app_user, "旧案件")
+
+
 async def test_tab_completes_with_existing_item_name_without_registering(app_user: User, app_env: AppEnv) -> None:
     app_env.seed(items=[make_item("週次レビュー", ScheduleType.ONE_TIME, anchor_date=TOMORROW)])
     await app_user.open("/")

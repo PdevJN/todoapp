@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from nicegui import ui
 from nicegui.events import GenericEventArguments, ValueChangeEventArguments
 
-from todoapp.domain.models import Category, ExecutionRecord
+from todoapp.domain.models import Category, ExecutionRecord, expired_category_tooltip, is_category_expired
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
 from todoapp.ui.dialog_base import DialogMixin
@@ -218,14 +218,19 @@ class LogView(DialogMixin):
             category = self._service.category_for_record(record)
             category_name = category.name if category is not None else "未定"
             category_color = category.color if category is not None else "grey"
+            expired = category is not None and is_category_expired(category, date.today())
             # 左側(バッジ+タスク名)だけを縮められるようにし、長いタスク名は「...」で省略して
             # マウスオーバーで全文をツールチップ表示する(時刻・ボタン側は幅を固定して見切れを防ぐ)
             with ui.row().classes("items-center gap-2 no-wrap min-w-0 flex-1"):
                 # 長いカテゴリ名は幅を制限して「...」で省略し、マウスオーバーで全文を表示する
-                with ui.badge(category_name).props(f"outline color={category_color}").classes(
-                    "shrink-0 max-w-[7rem] truncate"
-                ):
-                    ui.tooltip(category_name)
+                with ui.badge(f"❗️{category_name}" if expired else category_name).props(
+                    f"outline color={category_color}"
+                ).classes("shrink-0 max-w-[7rem] truncate"):
+                    ui.tooltip(
+                        f"{category_name} — {expired_category_tooltip(category)}"
+                        if expired and category is not None
+                        else category_name
+                    )
                 if record.manual:
                     ui.badge("手動").props("color=red-2 text-color=red-10").classes("shrink-0")
                 with ui.label(record.item_name).classes("font-medium truncate min-w-0"):
@@ -249,7 +254,8 @@ class LogView(DialogMixin):
                 if category is None:
                     ui.label("未定").classes("font-medium text-gray-500")
                 else:
-                    ui.label(category.name).classes("font-medium truncate min-w-0")
+                    expired = is_category_expired(category, date.today())
+                    ui.label(f"❗️{category.name}" if expired else category.name).classes("font-medium truncate min-w-0")
                     if category.prj_code:
                         ui.badge(category.prj_code).props("outline").classes("shrink-0 max-w-[8rem] truncate")
             total_label = ui.label(format_hhmm(seconds)).classes("text-gray-500 font-mono shrink-0")
@@ -258,6 +264,8 @@ class LogView(DialogMixin):
                 if category is not None:
                     # 省略された名前の全文を、ツールチップの先頭に表示する
                     ui.label(category.name).classes("font-bold")
+                    if is_category_expired(category, date.today()):
+                        ui.label(expired_category_tooltip(category)).classes("text-negative")
                 if not items:
                     ui.label("本日のタスクはありません" if self._view_date == date.today() else "この日のタスクはありません")
                 for name, item_seconds, done in items:

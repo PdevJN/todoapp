@@ -22,6 +22,7 @@ from todoapp.domain.models import (
     TodoItem,
     can_carry_over,
     carry_over_target,
+    is_category_expired,
     is_done,
     is_due_today,
     is_skipped,
@@ -736,6 +737,11 @@ class TodoService:
             return self.category_for_item(record.item_id)
         return next((c for c in self._data.categories if c.id == record.category_id), None)
 
+    def selectable_categories(self, keep_id: str | None = None) -> list[Category]:
+        """新しく割り当てられるカテゴリ(登録順)。有効期限切れは除き、`keep_id`(現在の割り当て)だけは残す。"""
+        today = self._clock().date()
+        return [c for c in self._data.categories if c.id == keep_id or not is_category_expired(c, today)]
+
     def category_today_totals(self, today: date) -> dict[str | None, float]:
         now = self._clock()
         totals: dict[str | None, float] = {}
@@ -757,7 +763,11 @@ class TodoService:
         result: list[tuple[Category | None, float]] = []
         uncategorized = 0.0
         known_ids = {category.id for category in self._data.categories}
+        today_date = self._clock().date()
         for category in self._data.categories:
+            # 有効期限が切れたカテゴリは、その日に1度も実行されていなければ出さない
+            if category.id not in totals and is_category_expired(category, today_date):
+                continue
             result.append((category, totals.get(category.id, 0.0)))
         for category_id, seconds in totals.items():
             if category_id not in known_ids:

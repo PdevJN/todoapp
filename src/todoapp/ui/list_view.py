@@ -6,7 +6,7 @@ from datetime import date
 from nicegui import ui
 from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 
-from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, ScheduleType, has_control_chars, is_category_expired, is_done, is_skipped
+from todoapp.domain.models import ITEM_NAME_MAX_LENGTH, ScheduleType, expired_category_tooltip, has_control_chars, is_category_expired, is_done, is_skipped
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import SCHEDULE_LABELS, carried_badge_text, format_duration
@@ -70,6 +70,7 @@ class ListView:
                         <q-badge v-if="props.row.carried" outline color="orange">{{ props.row.carried }}</q-badge>
                         <q-badge outline :color="props.row.category_color">
                             <span v-if="props.row.category_expired">❗️</span>{{ props.row.category_label }}
+                            <q-tooltip v-if="props.row.category_expired">{{ props.row.category_expired_tip }}</q-tooltip>
                         </q-badge>
                         <q-btn v-if="props.row.links.length" flat dense round size="sm" icon="link"
                                @click.stop="props.row.links.length === 1 && $parent.$emit('openLink', {id: props.row.id, link: props.row.links[0].id})">
@@ -192,6 +193,7 @@ class ListView:
                     "category_label": category.name if category else "未定",
                     "category_color": category.color if category else "grey",
                     "category_expired": bool(category and is_category_expired(category, today)),
+                    "category_expired_tip": expired_category_tooltip(category) if category else "",
                     "links": [
                         {"id": entry.link_id, "label": entry.label}
                         for entry in build_link_entries(item, self._service.link_templates)

@@ -11,6 +11,7 @@ from todoapp.domain.models import (
     TodoItem,
     can_carry_over,
     carry_over_target,
+    expired_category_tooltip,
     is_category_expired,
     is_done,
     is_due_today,
@@ -143,6 +144,11 @@ def test_is_category_expired_on_the_expiry_date_itself_is_not_expired() -> None:
     # 有効期限日当日はまだ「期限切れ」とはみなされない
     category = Category(name="仕事", expiry_date=date(2026, 1, 1))
     assert not is_category_expired(category, date(2026, 1, 1))
+
+
+def test_expired_category_tooltip_shows_expiry_date() -> None:
+    category = Category(name="仕事", expiry_date=date(2026, 1, 1))
+    assert expired_category_tooltip(category) == "有効期限切れ(2026-01-01)"
 
 
 def test_todo_item_done_date_roundtrip() -> None:

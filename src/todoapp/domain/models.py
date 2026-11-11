@@ -182,6 +182,12 @@ def is_category_expired(category: Category, today: date) -> bool:
     return category.expiry_date is not None and category.expiry_date < today
 
 
+def expired_category_tooltip(category: Category) -> str:
+    """期限切れのカテゴリの`❗️`にマウスオーバーしたときのチップの文言。"""
+    expiry = category.expiry_date.isoformat() if category.expiry_date else ""
+    return f"有効期限切れ({expiry})"
+
+
 def template_placeholders(url_template: str) -> list[str]:
     """URL雛形の置換項目名を、最初に現れた順に重複なく返す。"""
     return list(dict.fromkeys(_PLACEHOLDER_PATTERN.findall(url_template)))
