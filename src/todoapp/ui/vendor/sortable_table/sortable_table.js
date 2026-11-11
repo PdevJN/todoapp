@@ -3,7 +3,7 @@
 export default {
   template: "<div></div>",
   props: {
-    tableId: Number,
+    tableHtmlId: String,
     fixedRows: Number,
     delay: Number,
   },
@@ -17,7 +17,7 @@ export default {
       if (this.sortable) return clearInterval(this.retryTimer);
       this.attach();
     }, 100);
-    const table = document.getElementById("c" + this.tableId);
+    const table = document.getElementById(this.tableHtmlId);
     if (table) this.observer.observe(table, { childList: true, subtree: true });
   },
   unmounted() {
@@ -27,7 +27,7 @@ export default {
   },
   methods: {
     attach() {
-      const body = document.getElementById("c" + this.tableId)?.querySelector("tbody");
+      const body = document.getElementById(this.tableHtmlId)?.querySelector("tbody");
       if (!body || body === this.body) return;
       this.sortable?.destroy();
       this.body = body;
