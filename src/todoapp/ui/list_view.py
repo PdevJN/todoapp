@@ -12,13 +12,14 @@ from todoapp.ui.app_state import AppState, Screen
 from todoapp.ui.formatting import SCHEDULE_LABELS, carried_badge_text, format_duration
 from todoapp.ui.item_links import build_link_entries, open_link
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
+from todoapp.ui.table_layout import FIT_TABLE_CLASS, FIT_TABLE_CSS, fixed_width
 from todoapp.ui.vendor.sortable_table.sortable_table import SortableTable
 
 COLUMNS = [
     {"name": "name", "label": "アイテム名", "field": "name", "align": "left"},
-    {"name": "anchor", "label": "基準日", "field": "anchor", "align": "left"},
-    {"name": "cumulative", "label": "累積経過時間", "field": "cumulative", "align": "right"},
-    {"name": "remaining", "label": "残りの完了時間", "field": "remaining", "align": "right"},
+    fixed_width({"name": "anchor", "label": "基準日", "field": "anchor", "align": "left"}, 5),
+    fixed_width({"name": "cumulative", "label": "累積経過時間", "field": "cumulative", "align": "right"}, 7),
+    fixed_width({"name": "remaining", "label": "残りの完了時間", "field": "remaining", "align": "right"}, 7.5),
 ]
 
 
@@ -47,13 +48,19 @@ class ListView:
                     label="基準日", value=date.today().isoformat()
                 ).props("type=date")
                 self._anchor_filter.on_value_change(self.render.refresh)
-            self.table = ui.table(
-                columns=COLUMNS,
-                rows=[],
-                row_key="id",
-                selection="multiple",
-                on_select=self._on_select,
-            ).classes("w-full")
+            # 表はウィンドウ幅に収める(`ui/table_layout.py`)。アイテム名の列が残りの幅を取り、他の列は幅を固定する
+            ui.add_css(FIT_TABLE_CSS)
+            self.table = (
+                ui.table(
+                    columns=COLUMNS,
+                    rows=[],
+                    row_key="id",
+                    selection="multiple",
+                    on_select=self._on_select,
+                )
+                .props("dense")
+                .classes(f"{FIT_TABLE_CLASS} w-full")
+            )
             # QTableは既定でチェックボックス以外の行クリックでは選択されないため、
             # 行のどこをクリックしても選択できるようにrowClickでも選択状態を反映する
             self.table.on("rowClick", self._on_row_click, args=[[], ["id"]])
@@ -68,9 +75,11 @@ class ListView:
                         <q-badge outline color="primary">{{ props.row.schedule }}</q-badge>
                         <q-badge v-if="props.row.skipped" outline color="grey">スキップ</q-badge>
                         <q-badge v-if="props.row.carried" outline color="orange">{{ props.row.carried }}</q-badge>
-                        <q-badge outline :color="props.row.category_color">
+                        <q-badge outline :color="props.row.category_color" class="ellipsis" style="max-width: 100%">
                             <span v-if="props.row.category_expired">❗️</span>{{ props.row.category_label }}
-                            <q-tooltip v-if="props.row.category_expired">{{ props.row.category_expired_tip }}</q-tooltip>
+                            <q-tooltip max-width="20rem" style="word-break: break-all">
+                                {{ props.row.category_label }}<template v-if="props.row.category_expired"> — {{ props.row.category_expired_tip }}</template>
+                            </q-tooltip>
                         </q-badge>
                         <q-btn v-if="props.row.links.length" flat dense round size="sm" icon="link"
                                @click.stop="props.row.links.length === 1 && $parent.$emit('openLink', {id: props.row.id, link: props.row.links[0].id})">

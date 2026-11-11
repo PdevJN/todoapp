@@ -6,21 +6,30 @@ from datetime import date
 from nicegui import ui
 from nicegui.events import GenericEventArguments, TableSelectionEventArguments
 
-from todoapp.domain.models import CATEGORY_NAME_MAX_LENGTH, Category, validate_category_fields
+from todoapp.domain.models import (
+    CATEGORY_NAME_MAX_LENGTH,
+    Category,
+    expired_category_tooltip,
+    is_category_expired,
+    validate_category_fields,
+)
 from todoapp.domain.service import TodoService
 from todoapp.ui.app_state import AppState
 from todoapp.ui.dialog_base import DialogMixin
 from todoapp.ui.js_handlers import IME_SAFE_ENTER_HANDLER
+from todoapp.ui.table_layout import FIT_TABLE_CLASS, FIT_TABLE_CSS, fixed_width
 from todoapp.ui.vendor.sortable_table.sortable_table import SortableTable
 
 UNCATEGORIZED_ID = "__uncategorized__"
 
+# 表はウィンドウ幅に収める(`ui/table_layout.py`)。カテゴリ列が残りの幅を取り、他の列は幅を固定する。
+# 収まらない文字(カテゴリ名・種別・PRJコード)は「...」で省略し、マウスオーバーのチップで全文を見せる
 COLUMNS = [
-    {"name": "name", "label": "カテゴリ", "field": "name", "align": "left"},
-    {"name": "kind", "label": "種別", "field": "kind", "align": "left"},
-    {"name": "prj_code", "label": "PRJコード", "field": "prj_code", "align": "left"},
-    {"name": "expiry", "label": "有効期限日", "field": "expiry", "align": "left"},
-    {"name": "color", "label": "カラー", "field": "color", "align": "left"},
+    {"name": "name", "label": "カテゴリ", "field": "name", "align": "left", "classes": "ellipsis"},
+    fixed_width({"name": "kind", "label": "種別", "field": "kind", "align": "left"}, 5, ellipsis=True),
+    fixed_width({"name": "prj_code", "label": "PRJコード", "field": "prj_code", "align": "left"}, 6.5, ellipsis=True),
+    fixed_width({"name": "expiry", "label": "有効期限日", "field": "expiry", "align": "left"}, 7),
+    fixed_width({"name": "color", "label": "カラー", "field": "color", "align": "left"}, 5),
 ]
 
 
@@ -40,14 +49,22 @@ class CategoryListDialog(DialogMixin):
         self._new_category_input: ui.input | None = None
 
     def build(self) -> None:
-        with ui.dialog().props("persistent") as self.dialog, ui.card().classes("w-[36rem] gap-2"):
+        ui.add_css(FIT_TABLE_CSS)
+        # 幅はウィンドウに収まる範囲に制限する(Quasar既定の560px上限も、ここで上書きする)
+        with ui.dialog().props("persistent") as self.dialog, ui.card().classes("gap-2").style(
+            "width: 48rem; max-width: calc(100vw - 2rem)"
+        ):
             ui.label("カテゴリ一覧").classes("text-lg font-bold")
-            self.table = ui.table(
-                columns=COLUMNS,
-                rows=[],
-                row_key="id",
-                selection="multiple",
-                on_select=self._on_select,
+            self.table = (
+                ui.table(
+                    columns=COLUMNS,
+                    rows=[],
+                    row_key="id",
+                    selection="multiple",
+                    on_select=self._on_select,
+                )
+                .props("dense")
+                .classes(f"{FIT_TABLE_CLASS} w-full")
             )
             self.table.on("rowClick", self._on_row_click, args=[[], ["id"]])
             # 行をドラッグ&ドロップで並べ替える。先頭の「未定」行は固定
@@ -60,19 +77,40 @@ class CategoryListDialog(DialogMixin):
                 </q-td>
                 """,
             )
-            # マウスオーバーで、このカテゴリに属する本日のアイテムを一覧表示する
+            # マウスオーバーで、カテゴリの内容と、このカテゴリに属する本日のタスクを、見出し付きの2つの区画に分けて表示する
             self.table.add_slot(
                 "body-cell-name",
                 r"""
                 <q-td :props="props">
-                    <span>{{ props.row.name }}</span>
-                    <q-tooltip>
-                        <div v-if="props.row.today_items.length === 0">本日のアイテムはありません</div>
-                        <div v-for="itemName in props.row.today_items" :key="itemName">{{ itemName }}</div>
+                    {{ props.row.name }}
+                    <q-tooltip max-width="22rem">
+                        <div class="text-caption text-grey-5">カテゴリ</div>
+                        <div class="text-weight-bold" style="word-break: break-all">{{ props.row.name }}</div>
+                        <template v-if="!props.row.undecided">
+                            <div class="text-caption">種別: {{ props.row.kind }}</div>
+                            <div class="text-caption">PRJコード: {{ props.row.prj_code }}</div>
+                            <div class="text-caption">有効期限日: {{ props.row.expiry }}</div>
+                            <div v-if="props.row.expired" class="text-caption text-red-3">❗️{{ props.row.expired_tip }}</div>
+                        </template>
+                        <q-separator dark class="q-my-sm" />
+                        <div class="text-caption text-grey-5">本日のタスク</div>
+                        <div v-if="props.row.today_items.length === 0" class="text-caption">本日のタスクはありません</div>
+                        <div v-for="itemName in props.row.today_items" :key="itemName" style="word-break: break-all">・{{ itemName }}</div>
                     </q-tooltip>
                 </q-td>
                 """,
             )
+            # 省略された種別・PRJコードの全文を、マウスオーバーで表示する
+            for column in ("kind", "prj_code"):
+                self.table.add_slot(
+                    f"body-cell-{column}",
+                    r"""
+                    <q-td :props="props">
+                        {{ props.value }}
+                        <q-tooltip v-if="props.value !== '-'" max-width="20rem" style="word-break: break-all">{{ props.value }}</q-tooltip>
+                    </q-td>
+                    """,
+                )
             self._new_category_input = ui.input(placeholder="新しいカテゴリ名を入力してEnter(Shift+Enterで種別入力)").props(
                 f"maxlength={CATEGORY_NAME_MAX_LENGTH}"
             ).classes("w-full")
@@ -98,11 +136,15 @@ class CategoryListDialog(DialogMixin):
                 "prj_code": "-",
                 "expiry": "-",
                 "color": "grey",
+                "undecided": True,
+                "expired": False,
+                "expired_tip": "",
                 "today_items": [item.name for item in today_items if item.category_id is None],
             }
         ]
         for category in self._service.categories:
             today_item_names = [item.name for item in today_items if item.category_id == category.id]
+            expired = is_category_expired(category, date.today())
             rows.append(
                 {
                     "id": category.id,
@@ -111,6 +153,9 @@ class CategoryListDialog(DialogMixin):
                     "prj_code": category.prj_code or "-",
                     "expiry": category.expiry_date.isoformat() if category.expiry_date else "-",
                     "color": category.color,
+                    "undecided": False,
+                    "expired": expired,
+                    "expired_tip": expired_category_tooltip(category) if expired else "",
                     "today_items": today_item_names,
                 }
             )
