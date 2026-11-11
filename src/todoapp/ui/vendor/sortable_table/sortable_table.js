@@ -3,7 +3,7 @@
 export default {
   template: "<div></div>",
   props: {
-    tableId: Number,
+    tableHtmlId: String,
     fixedRows: Number,
     delay: Number,
   },
@@ -17,7 +17,7 @@ export default {
       if (this.sortable) return clearInterval(this.retryTimer);
       this.attach();
     }, 100);
-    const table = document.getElementById("c" + this.tableId);
+    const table = document.getElementById(this.tableHtmlId);
     if (table) this.observer.observe(table, { childList: true, subtree: true });
   },
   unmounted() {
@@ -27,7 +27,7 @@ export default {
   },
   methods: {
     attach() {
-      const body = document.getElementById("c" + this.tableId)?.querySelector("tbody");
+      const body = document.getElementById(this.tableHtmlId)?.querySelector("tbody");
       if (!body || body === this.body) return;
       this.sortable?.destroy();
       this.body = body;
@@ -35,6 +35,11 @@ export default {
       this.sortable = this.Sortable.create(body, {
         animation: 150,
         delay: this.delay,
+        // delay中(150ms)の移動許容量。SafariとWKWebView(ネイティブウィンドウ)では、通常のドラッグ方式だと
+        // touchStartThresholdが4へ上書きされ、devicePixelRatioで割られる(Retinaで実質2px)ため、
+        // わずかなブレでドラッグ開始が取り消される。forceFallbackで避け、約10pxのブレを許容する
+        touchStartThreshold: 10,
+        forceFallback: true,
         draggable: "tr",
         ghostClass: "opacity-50",
         preventOnFilter: false,

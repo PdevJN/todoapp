@@ -103,8 +103,15 @@ class MainView:
             ).props("dense")
             self.list_container = ui.column().classes("w-full gap-1")
             # delayを設定しないと、素早いクリック(特にダブルクリック)時のわずかなカーソルの
-            # ブレでSortableJSがドラッグ開始と誤判定し、click/dblclickイベントが失われることがある
-            self.list_container.make_sortable(on_end=self._on_reorder, options={"delay": 150})
+            # ブレでSortableJSがドラッグ開始と誤判定し、click/dblclickイベントが失われることがある。
+            # 一方でdelay中(150ms)に許容量を超えて動くと、ドラッグ開始が取り消される。許容量は
+            # touchStartThresholdだが、SafariとWKWebView(ネイティブウィンドウ)では、通常のドラッグ方式だと
+            # 値が4へ上書きされ、さらにdevicePixelRatioで割られる(Retinaで実質2px)ため、指定が効かない。
+            # forceFallbackで上書きと割り算を避け、約10pxのブレを許容する
+            self.list_container.make_sortable(
+                on_end=self._on_reorder,
+                options={"delay": 150, "touchStartThreshold": 10, "forceFallback": True},
+            )
             self.render()
             # 既存アイテム・過去の実行記録の名前を、前方一致で薄く表示し、Tabで確定する
             self._new_item_input = ui.input(

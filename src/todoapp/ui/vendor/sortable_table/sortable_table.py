@@ -21,7 +21,8 @@ class SortableTable(ui.element, component='sortable_table.js'):
         delay: int = 150,
     ) -> None:
         super().__init__()
-        self._props['table-id'] = table.id
+        # DOM上のIDはNiceGUIのバージョンで変わる(4.0.0で`c<id>`から`ng-<id>`)ため、決め打ちせず`html_id`を渡す
+        self._props['table-html-id'] = table.html_id
         self._props['fixed-rows'] = fixed_rows
         self._props['delay'] = delay
         self.on('reorder', lambda e: on_reorder(e.args['old_index'], e.args['new_index']))
