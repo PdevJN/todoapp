@@ -5,6 +5,7 @@
 
 import json
 from datetime import date, timedelta
+from typing import Any
 
 from nicegui import ui
 from nicegui.testing import User
@@ -680,6 +681,30 @@ async def test_dropping_a_row_in_category_list_reorders_categories_after_fixed_u
     _drop_row(app_user, fixed_rows=1, old_index=1, new_index=3)  # 添字0は固定の「未定」行
 
     assert [category.name for category in app_env.todos().categories] == ["B", "C", "A"]
+
+
+def _category_list_rows(user: User) -> list[dict[str, Any]]:
+    [table] = [t for t in user.find(kind=ui.table).elements if any(c["name"] == "prj_code" for c in t.columns)]
+    return list(table.rows)
+
+
+async def test_category_list_rows_carry_tooltip_values_and_expired_flag(app_user: User, app_env: AppEnv) -> None:
+    work = Category(name="開発", kind="業務", prj_code="PRJ-1")
+    old = Category(name="旧案件", expiry_date=date(2000, 1, 1))
+    item = make_item("設計")
+    item.category_id = work.id
+    app_env.seed(items=[item], categories=[work, old])
+    await app_user.open("/")
+
+    await press(app_user, "g")
+    await shows(app_user, "カテゴリ一覧")
+
+    undecided, work_row, old_row = _category_list_rows(app_user)
+    assert undecided["expired"] is False
+    assert (work_row["kind"], work_row["prj_code"], work_row["expired"]) == ("業務", "PRJ-1", False)
+    assert work_row["today_items"] == ["設計"]
+    assert old_row["expired"] is True
+    assert old_row["expired_tip"] == "有効期限切れ(2000-01-01)"
 
 
 # --- 設定 ---------------------------------------------------------------------------------
