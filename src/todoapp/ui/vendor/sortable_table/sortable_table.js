@@ -35,6 +35,11 @@ export default {
       this.sortable = this.Sortable.create(body, {
         animation: 150,
         delay: this.delay,
+        // delay中(150ms)の移動許容量。SafariとWKWebView(ネイティブウィンドウ)では、通常のドラッグ方式だと
+        // touchStartThresholdが4へ上書きされ、devicePixelRatioで割られる(Retinaで実質2px)ため、
+        // わずかなブレでドラッグ開始が取り消される。forceFallbackで避け、約10pxのブレを許容する
+        touchStartThreshold: 10,
+        forceFallback: true,
         draggable: "tr",
         ghostClass: "opacity-50",
         preventOnFilter: false,
