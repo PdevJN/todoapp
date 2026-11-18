@@ -130,3 +130,90 @@ def test_snap_resize_shorter_than_one_minute_returns_none() -> None:
 def test_snap_resize_clamps_to_day_bounds() -> None:
     assert snap_resize("end", datetime(2026, 10, 1, 1), at(23), [], DAY) == (at(23), datetime(2026, 10, 1))
     assert snap_resize("start", datetime(2026, 9, 29, 22), at(1), [], DAY) == (at(0), at(1))
+
+
+def test_fit_to_gap_keeps_free_interval() -> None:
+    from todoapp.domain.record_layout import fit_to_gap
+
+    assert fit_to_gap(at(10), at(11), [(at(8), at(9)), (at(12), at(13))]) == (at(10), at(11))
+
+
+def test_fit_to_gap_snaps_start_to_previous_end_keeping_seconds() -> None:
+    from todoapp.domain.record_layout import fit_to_gap
+
+    assert fit_to_gap(at(9, 0, 10), at(11), [(at(8), at(9, 0, 30))]) == (at(9, 0, 30), at(11))
+
+
+def test_fit_to_gap_snaps_end_to_next_start() -> None:
+    from todoapp.domain.record_layout import fit_to_gap
+
+    assert fit_to_gap(at(10), at(12, 30), [(at(12), at(13))]) == (at(10), at(12))
+
+
+def test_fit_to_gap_snaps_both_ends() -> None:
+    from todoapp.domain.record_layout import fit_to_gap
+
+    others = [(at(8), at(10)), (at(12), at(14))]
+
+    assert fit_to_gap(at(9), at(13), others) == (at(10), at(12))
+
+
+def test_fit_to_gap_follows_adjacent_records() -> None:
+    from todoapp.domain.record_layout import fit_to_gap
+
+    others = [(at(8), at(9)), (at(9), at(10))]
+
+    assert fit_to_gap(at(8, 30), at(11), others) == (at(10), at(11))
+
+
+def test_fit_to_gap_returns_none_when_no_gap_remains() -> None:
+    from todoapp.domain.record_layout import fit_to_gap
+
+    assert fit_to_gap(at(9), at(10), [(at(8), at(11))]) is None
+
+
+def test_fit_to_gap_picks_earlier_side_when_record_is_inside() -> None:
+    from todoapp.domain.record_layout import fit_to_gap
+
+    assert fit_to_gap(at(8), at(12), [(at(9), at(10))]) == (at(8), at(9))
+    assert fit_to_gap(at(8), at(12), [(at(10), at(11))]) == (at(8), at(10))
+    assert fit_to_gap(at(8), at(11), [(at(9), at(10))]) == (at(8), at(9))
+
+
+def test_fit_to_gap_with_short_record_inside_reported_case() -> None:
+    from todoapp.domain.record_layout import fit_to_gap
+
+    record = [(datetime(2026, 11, 18, 20, 40, 27, 350857), datetime(2026, 11, 18, 20, 40, 28, 995631))]
+    start, end = datetime(2026, 11, 18, 20, 40), datetime(2026, 11, 18, 20, 45)
+
+    assert fit_to_gap(start, end, record) == (start, datetime(2026, 11, 18, 20, 40, 27))
+
+
+def test_snap_start_out_moves_to_end_of_containing_record() -> None:
+    from todoapp.domain.record_layout import snap_start_out
+
+    others = [(at(8), at(9)), (at(9), at(10))]
+
+    assert snap_start_out(at(8, 30), others) == at(10)
+    assert snap_start_out(at(10), others) == at(10)
+    assert snap_start_out(at(7), others) == at(7)
+
+
+def test_snap_end_out_moves_to_start_of_containing_record() -> None:
+    from todoapp.domain.record_layout import snap_end_out
+
+    others = [(at(8), at(9)), (at(9), at(10))]
+
+    assert snap_end_out(at(9, 30), others) == at(8)
+    assert snap_end_out(at(8), others) == at(8)
+    assert snap_end_out(at(11), others) == at(11)
+
+
+def test_snap_rounds_fractional_seconds_away_from_the_record() -> None:
+    from todoapp.domain.record_layout import fit_to_gap, snap_end_out, snap_start_out
+
+    record = [(datetime(2026, 9, 30, 9, 0, 0, 500), datetime(2026, 9, 30, 10, 0, 0, 500000))]
+
+    assert snap_start_out(at(9, 30), record) == at(10, 0, 1)
+    assert snap_end_out(at(9, 30), record) == at(9, 0, 0)
+    assert fit_to_gap(at(9, 30), at(11), record) == (at(10, 0, 1), at(11))

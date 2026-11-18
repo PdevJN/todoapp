@@ -73,3 +73,57 @@ def snap_resize(edge: Edge, new_time: datetime, fixed_time: datetime, others: Se
             moved = min(moved, other_start)
         result = (fixed_time, moved)
     return result if result[1] - result[0] >= _MIN_DURATION else None
+
+
+def _ceil_second(value: datetime) -> datetime:
+    """秒未満を切り上げる(入力欄は秒単位のため、開始時刻を境界より前にしない)。"""
+    floored = value.replace(microsecond=0)
+    return floored + timedelta(seconds=1) if value.microsecond else floored
+
+
+def _floor_second(value: datetime) -> datetime:
+    """秒未満を切り捨てる(終了時刻を境界より後にしない)。"""
+    return value.replace(microsecond=0)
+
+
+def fit_to_gap(start: datetime, end: datetime, others: Sequence[Interval]) -> Interval | None:
+    """入力した区間から既存の記録を除いた空き区間のうち、最も前のものを返す(入力した開始時刻を優先する)。
+
+    食い込んだ端は既存の記録の境界(秒精度。開始は切り上げ、終了は切り捨て)へ寄り、
+    区間の途中に既存の記録が入る場合は、その前の空きになる。
+    空きが残らない場合は`None`を返す。
+    """
+    segments: list[Interval] = []
+    cursor = start
+    for other_start, other_end in sorted(others):
+        if other_end <= cursor or other_start >= end:
+            continue
+        segments.append((cursor, _floor_second(min(other_start, end))))
+        cursor = max(cursor, _ceil_second(other_end))
+    segments.append((cursor, end))
+    valid = [segment for segment in segments if segment[0] < segment[1]]
+    return valid[0] if valid else None
+
+
+def snap_start_out(value: datetime, others: Sequence[Interval]) -> datetime:
+    """開始時刻が既存の記録の中にあれば、その記録の終了時刻(連続していれば外側)へ寄せる。"""
+    changed = True
+    while changed:
+        changed = False
+        for other_start, other_end in others:
+            if other_start <= value < other_end:
+                value = _ceil_second(other_end)
+                changed = True
+    return value
+
+
+def snap_end_out(value: datetime, others: Sequence[Interval]) -> datetime:
+    """終了時刻が既存の記録の中にあれば、その記録の開始時刻(連続していれば外側)へ寄せる。"""
+    changed = True
+    while changed:
+        changed = False
+        for other_start, other_end in others:
+            if other_start < value <= other_end:
+                value = _floor_second(other_start)
+                changed = True
+    return value
